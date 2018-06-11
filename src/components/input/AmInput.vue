@@ -38,7 +38,7 @@
             v-if="onToggle"
             class="am-icon"
             @click="() => onToggle()">
-            V
+            8
         </button>
     </div>
 </template>

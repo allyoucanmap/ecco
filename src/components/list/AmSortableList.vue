@@ -43,7 +43,7 @@
         display: none;
     }
     .am-item.am-selected {
-        background-color: #eeeeee;
+        background-color: #91f3f7;
     }
     .am-group .am-item {
         background-color: #333333;
@@ -54,6 +54,14 @@
     }
     .am-group.am-collapsed .am-item {
         background-color: #444444;
+    }
+    .am-item .am-panel {
+        width: 100%;
+        pointer-events: auto;
+    }
+    .am-item-panel {
+        padding: 0;
+        border-bottom: none; 
     }
 </style>
 
@@ -67,12 +75,14 @@
         @drop="$_am_drop">
         <div
             v-for="(item, itemId) in items"
-            :class="`am-item-container ${item.type === 'group' && item.collapsed && 'am-collapsed'} ${(oldID === item.id || item.collapsed === true && item.type !== 'group') && 'am-hide'} ${item.type === 'group' && 'am-group'}`"
+            :class="`am-item-container ${!item.panel && item.type === 'group' && item.collapsed ? 'am-collapsed' : ''} ${(oldID === item.id || item.collapsed === true && item.type !== 'group') ? 'am-hide' : ''} ${!item.panel && item.type === 'group' ? 'am-group' : ''}`"
             :key="itemId"
             :data-id="item.id"
-            :draggable="true"
-            @click="() => item.type !== 'group' && onSelect(item.id)">
+            :data-list-id="listID"
+            :draggable="!item.expanded && items.length > 1"
+            @click="() => onSelect(item.id)">
             <div
+                v-if="!item.panel"
                 :class="`am-item ${item.id === selectedItem.id && 'am-selected'}`"
                 :data-id="item.id">
                 <div class="am-label">
@@ -90,21 +100,51 @@
                         @click="() => $am_onExpand(item.id)">
                         {{ item.collapsed ? 'M' : 'P' }}
                     </button>
-                    <!--button
+                    <button
                         class="am-icon"
-                        v-if="item.type !== 'group'">
-                        4
-                    </button-->
+                        v-if="item.type !== 'group'"
+                        @click="event => $am_onDuplicate(event, item.id)">
+                        9
+                    </button>
                 </div>
+                
+            </div>
+            <div
+                v-if="item.panel"
+                :class="`am-item am-item-panel`"
+                :data-id="item.id"
+                :key="item.id">
+                <am-panel
+                    :head="item.head"
+                    :collapsed="!item.expanded"
+                    :key="item.id"
+                    :on-remove="() => $am_onRemove(item.id)"
+                    :on-expand="value => $am_onExpandPanel(item.id, value)">
+                    <am-input-group
+                        v-for="(param, valueId) in item.params"
+                        :key="valueId"
+                        :value="param.value"
+                        :default-option="param.option"
+                        :label="param.label"
+                        :type="param.type"
+                        :on-change="value => $am_onChange(item.id, valueId, value)"/>
+                </am-panel>
             </div>
         </div>
     </div>
 </template>
 
 <script>
-    import {head} from 'lodash';
+    import {head, isNil} from 'lodash';
+    import uuidv1 from 'uuid/v1';
+    import AmPanel from '../panel/AmPanel.vue';
+    import AmInputGroup from '../input/AmInputGroup.vue';
 
     export default {
+        components: {
+            AmPanel,
+            AmInputGroup
+        },
         props: {
             items: {
                 type: Array,
@@ -120,7 +160,7 @@
             },
             selectedItem: {
                 type: Object,
-                default: () => {}
+                default: () => ({})
             }
         },
         data() {
@@ -128,14 +168,22 @@
                 oldID: -1,
                 hoverID: -1,
                 currentID: -1,
-                position: ''
+                position: '',
+                listID: -1,
+                oldListID: -1
             };
+        },
+        created() {
+            this.listID = uuidv1();
         },
         methods: {
             $_am_dragover(event) {
-                const hoverID = event.target.getAttribute('data-id');
+                const children = [...this.$el.children];
+                const child = head(children.filter(child => child.contains(event.target)));
+                const hoverID  = child.getAttribute('data-id');
+
                 const containerRect = this.$el.getBoundingClientRect();
-                const targetRect = event.target.getBoundingClientRect();
+                const targetRect = child.getBoundingClientRect();
                 const mouseY = event.clientY - containerRect.top;
                 const targetY = targetRect.top - containerRect.top;
                 const items = [...this.$el.getElementsByClassName('am-item-container')];
@@ -149,10 +197,10 @@
 
                 if (hoverID) {
                     if (mouseY >= targetY + targetRect.height / 2) {
-                        event.target.style.paddingBottom = 27 + 'px';
+                        child.style.paddingBottom = 27 + 'px';
                         this.position = 'DOWN';
                     } else if (mouseY < targetY + (targetRect.height / 2)) {
-                        event.target.style.paddingTop = 27 + 'px';
+                        child.style.paddingTop = 27 + 'px';
                         this.position = 'UP';
                     }
                 }
@@ -175,8 +223,10 @@
                 event.preventDefault();
             },
             $_am_drop(event) {
-                this.currentID = parseFloat(event.target.getAttribute('data-id'));
-                if (this.currentID !== this.oldID) {
+                const children = [...this.$el.children];
+                this.currentID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-id')));
+                const currentListID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-list-id')));
+                if (this.oldListID === currentListID && !isNil(this.currentID) && !isNil(this.oldID) && this.currentID !== this.oldID) {
                     const oldItem = head(this.items.filter(item => item.id === this.oldID));
                     const collapsedItems = this.items.filter(item => item.type !== 'group' && item.collapsed);
                     const oldGroupTail = oldItem.type === 'group' && collapsedItems.filter(collapsed => collapsed.groupId === oldItem.id) || [];
@@ -202,9 +252,12 @@
                 }
                 this.currentID = -1;
                 this.oldID = -1;
+                this.oldListID = -1;
             },
             $_am_dragstart(event) {
-                this.oldID = parseFloat(event.target.getAttribute('data-id'));
+                const children = [...this.$el.children];
+                this.oldID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-id')));
+                this.oldListID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-list-id')));
             },
             $am_onExpand(itemId) {
                 const items = this.items.map((item) => {
@@ -220,8 +273,23 @@
                 }, []);
                 this.onChange(items);
             },
+            $am_onExpandPanel(itemId, expanded) {
+                const items = this.items.map(item => item.id === itemId ? {...item, expanded} : {...item});
+                this.onChange(items);
+            },
             $am_onRemove(id) {
-                const items = this.items.filter(item => item.id !== id);
+                const items = this.items.filter(item => item.id !== id && !(item.groupId === id && item.collapsed));
+                this.onChange(items);
+            },
+            $am_onDuplicate(event, id) {
+                event.stopPropagation();
+                const items = this.items.reduce((newItems, item) => {
+                    return [...newItems, ...(item.id === id ? [item, {...item, id: uuidv1()}] : [item])];
+                }, []);
+                this.onChange(items);
+            },
+            $am_onChange(itemId, valueId, value) {
+                const items = this.items.map(item => item.id === itemId ? {...item, params: (item.params || []).map((param, vId) => vId === valueId ? {...param, value} : {...param})} : {...item});
                 this.onChange(items);
             }
         }

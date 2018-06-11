@@ -9,7 +9,7 @@ const webpackDevMiddleware = require("webpack-dev-middleware");
 const webpackHotMiddleware = require("webpack-hot-middleware");
 const compiler = webpack(config);
 
-application((app) => {
+application(3000, (app) => {
     app.use(webpackDevMiddleware(compiler, {
         hot: true,
         filename: 'ecco.js',

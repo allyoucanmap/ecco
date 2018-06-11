@@ -34,9 +34,6 @@
     import {mapGetters, mapActions} from 'vuex';
 
     export default {
-        props: {
-            
-        },
         data() {
             return {
                 slider: null,
@@ -85,20 +82,17 @@
                     step: 1
                 });
 
+                const origins = div.getElementsByClassName('noUi-origin');
+                origins[0].setAttribute('disabled', true);
+                origins[2].setAttribute('disabled', true);
                 this.slider.on('change', (value) => {
-
-                    const minZoom = value && value[0] && this.$am_nearIndex(parseFloat(value[0].substring(4, value[0].length))) || this.minZoom;
                     const zoom = value && value[1] && this.$am_nearIndex(parseFloat(value[1].substring(4, value[1].length))) || 0;
-                    const maxZoom = value && value[2] && this.$am_nearIndex(parseFloat(value[2].substring(4, value[2].length))) || this.maxZoom;
                     this.setZoom({
-                        layerId: this.layerId,
-                        scales: {
-                            ...(this.minZoom === minZoom ? {} : {minZoom, maxScaleDenominator: this.scales[minZoom]}),
-                            ...(this.maxZoom === maxZoom ? {} : {maxZoom, minScaleDenominator: this.scales[maxZoom]})
-                        },
                         currentZoom: Math.round(zoom)
                     });
                 });
+
+                this.$am_onToggle();
             }
         },
         beforeDestroy() {
@@ -124,11 +118,6 @@
                 this.slider.set([minZoom, isBetween ? this.zoom : Math.round((minZoom + maxZoom) / 2), maxZoom]);
                 if (!isBetween) {
                     this.setZoom({
-                        layerId: this.layerId,
-                        scales: {
-                            ...(this.minZoom === minZoom ? {} : {minZoom, maxScaleDenominator: this.scales[minZoom]}),
-                            ...(this.maxZoom === maxZoom ? {} : {maxZoom, minScaleDenominator: this.scales[maxZoom]})
-                        },
                         currentZoom: Math.round((minZoom + maxZoom) / 2)
                     });
                 }

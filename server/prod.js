@@ -3,4 +3,4 @@
 /* eslint-disable no-console */
 
 const application = require('./server');
-application();
+application(3003);

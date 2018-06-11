@@ -44,17 +44,25 @@
     .am-operator-selector > div > button + button {
         border-left: none;
     }
+    .am-operator + .am-add-filter {
+        border-left: 1px solid rgba(0, 0, 0, 0.12);
+    }
 </style>
 
 <template lang="html">
     <div class="am-selector">
-        <input v-model="param">
+        <input
+            :value="param"
+            @change="event => $am_onChange('param', event.target.value)">
         <button
             class="am-operator"
             @click="() => selectOp = !selectOp">
             {{ operator }}
         </button>
-        <input v-model="value">
+        <input
+            v-if="!hideValue"
+            :value="value"
+            @change="event => $am_onChange('value', event.target.value)">
         <button
             class="am-add-filter am-icon"
             v-if="onRemove"
@@ -101,7 +109,8 @@
                 value: '',
                 operator: '',
                 operators,
-                selectOp: false
+                selectOp: false,
+                hideValue: false
             }
         },
         watch: {
@@ -112,6 +121,7 @@
                 this.onChange('value', value);
             },
             operator(operator) {
+                this.hideValue = operators[operator] && operators[operator].hideValue;
                 this.onChange('operator', operator);
             },
             filter(filter) {
@@ -126,7 +136,13 @@
             if (this.filter) {
                 this.operator = this.filter.operator;
                 this.param = this.filter.param;
-                this.value = this.filter.value;
+                this.hideValue = operators[this.operator] && operators[this.operator].hideValue;
+                this.value = this.filter.value; 
+            }
+        },
+        methods: {
+            $am_onChange(key, value) {
+                this[key] = value;
             }
         }
     };

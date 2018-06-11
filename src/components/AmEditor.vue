@@ -41,7 +41,7 @@
     <div class="am-editor">
         <div
             class="am-head"
-            v-if="selectedLayer.id">
+            v-if="selectedLayer.id && selectedLayer.type === 'layer'">
             <button
                 class="am-icon"
                 v-for="(tool, idx) in toolbar"
@@ -54,7 +54,9 @@
             class="am-body"
             v-if="selectedLayer.id"
             :key="selectedLayer.id + 'body'">
-            <am-panel head="General">
+            <am-panel
+                v-if="selectedLayer.type === 'layer'"
+                head="General">
                 <am-input-group
                     v-for="(info, infoId) in general"
                     :key="infoId"
@@ -64,26 +66,47 @@
                     :on-change="value => $am_onChangeGeneral(info.name, value)"/>
             </am-panel>
 
-            <am-panel head="Filter">
+            <am-panel
+                v-if="selectedLayer.type === 'layer'"
+                head="Filter">
                 <am-filter
                     :filters="filters"
                     :on-change="$am_onChangeFilter"/>
             </am-panel>
 
             <am-panel
-                v-for="(symbol, symbolId) in rule"
-                :key="symbolId"
-                :head="symbol._"
-                :on-remove="() => $am_onRemove(symbolId)">
+                v-if="selectedLayer.type === 'layer'"
+                head="Scales">
                 <am-input-group
-                    v-for="(param, valueId) in symbolizers[symbol._]"
-                    :key="valueId"
-                    :value="symbol[param]"
-                    :default-option="types[param] && types[param].base"
-                    :label="param.replace('-', ' ')"
-                    :type="types[param]"
-                    :on-change="value => $am_onChange(symbolId, param, value)"/>
+                    label="min-scale-denominator"
+                    :type="{format: 'text'}"
+                    :value="scalesDenominator.minScaleDenominator"
+                    :on-change="value => $am_onChangeScale('minScaleDenominator', 'maxZoom', value)"/>
+                <am-input-group
+                    
+                    label="max-scale-denominator"
+                    :type="{format: 'text'}"
+                    :value="scalesDenominator.maxScaleDenominator"
+                    :on-change="value => $am_onChangeScale('maxScaleDenominator', 'minZoom', value)"/>
             </am-panel>
+
+            <am-sortable-list
+                :items="rule.map((symbol, id) => ({
+                    panel: true,
+                    id: 'rule:' + symbol._id,
+                    expanded: symbol._expanded,
+                    head: symbol._,
+                    _id: symbol._id, 
+                    _: symbol._, 
+                    params: symbolizers[symbol._].map(param => ({
+                        value: symbol[param],
+                        label: param.replace('-', ' '),
+                        option: types[param] && types[param].base,
+                        type: types[param],
+                        name: param
+                    }))
+                }))"
+                :on-change="(items) => $am_onChange(items)"/>
         </div>
         <div
             class="am-placeholder"
@@ -94,32 +117,22 @@
 </template>
 
 <script>
-    import {head, isEqual} from 'lodash';
+    import {isEqual, isNil, isEmpty} from 'lodash';
     import AmPanel from './panel/AmPanel.vue';
     import AmInputGroup from './input/AmInputGroup.vue';
+    import AmSortableList from './list/AmSortableList.vue';
     import AmFilter from './form/AmFilter.vue';
-    import {types, symbolizers, styleFunctions, filtersFunctions} from '../utils/SLDUtils';
-    import xml2js from 'xml2js';
+    import {types, symbolizers} from '../utils/SLDUtils';
     import {mapActions, mapGetters} from 'vuex';
-
-    const xmlBuilder = new xml2js.Builder({
-        xmldec: {
-            version: '1.0',
-            encoding: 'ISO-8859-1',
-            standalone: false
-        },
-        renderOpts: {
-            pretty: false,
-            indent: '',
-            newline: ''
-        }
-    });
+    import {getSLD} from '../utils/SLDUtils';
+    import uuidv1 from 'uuid/v1';
 
     export default {
         components: {
             AmPanel,
             AmInputGroup,
-            AmFilter
+            AmFilter,
+            AmSortableList
         },
         data() {
             return {
@@ -158,7 +171,11 @@
             ...mapGetters({
                 selectedLayer: 'app/selectedLayer',
                 layers: 'app/layers',
-                projectName: 'app/projectName'
+                projectName: 'app/projectName',
+                scalesDenominator: 'app/scalesDenominator',
+                scalesRound: 'app/scalesRound',
+                zoom: 'app/zoom',
+                items: 'app/items'
             })
         },
         watch: {
@@ -184,7 +201,7 @@
             },
             selectedLayer(newLayer, oldLayer) {
                 if (!isEqual(newLayer, oldLayer)) {
-                    this.general = newLayer.general || [
+                    this.general = newLayer.general || newLayer.type === 'layer' && [
                         {
                             name: 'Name',
                             value: newLayer.label
@@ -203,17 +220,23 @@
                         operator: 'AND',
                         rules: []
                     };
-                    this.rule = newLayer.rule || [];
+                    this.rule = newLayer.rule || newLayer.type === 'layer' && [] || [
+                        {
+                            _: 'FeatureTypeStyle',
+                            _id: uuidv1(),
+                            label: newLayer.label
+                        }
+                    ];
                     this.scales = newLayer.scales || {}
                 }
             }
         },
         methods: {
-            $am_testFilter(value) {
-                this.testValue = {...value};
-            },
             ...mapActions({
-                $am_updateSLD: 'app/updateStyle'
+                $am_updateSLD: 'app/updateStyle',
+                setZoom: 'app/setZoom',
+                updateLayers: 'app/updateLayers',
+                updateAllSLD: 'app/updateAllSLD',
             }),
             $am_onChangeGeneral(key, value) {
                 if (key) {
@@ -221,51 +244,77 @@
                     this.general = general;
                 }
             },
-            $am_onChange(symbolId, key, value) {
-                if (key) {
-                    const rule = this.rule.map((symbol, idx) => idx === symbolId ? {...symbol, [key]: value} : {...symbol});
-                    this.rule = [...rule];
-                }
+            $am_parseParams(params) {
+                return (params || [])
+                    .filter(param => param && !isNil(param.name) && !isNil(param.value))
+                    .reduce((newParams, param) => {
+                        return {
+                            ...newParams,
+                            [param.name]: param.value
+                        };
+                    }, {});
             },
-            $am_addSymbolizer(symbol) {
-                const rule = [...this.rule, { _: symbol}];
+            $am_onChange(items) {
+                const rule = items.map(item => ({_id: item._id, _: item._, _expanded: item.expanded, ...this.$am_parseParams(item.params || [])}));
                 this.rule = [...rule];
             },
-            $am_onRemove(symbolId) {
-                const rule = this.rule.filter((symbol, id) => id !== symbolId);
+            $am_addSymbolizer(symbol) {
+                const rule = [...this.rule, {_id: uuidv1(), _: symbol}];
                 this.rule = [...rule];
             },
             $am_onChangeFilter(filters) {
                 this.filters = {...filters};
             },
-            $am_generateRules(currentFilter) {
-                return this.layers
-                    .filter(({general, filters, rule, name}) =>
-                        general && filters && rule && name === this.selectedLayer.name)
-                    .map(layer => {
-                        const {general, filters, rule, scales} = this.selectedLayer.id === layer.id ? currentFilter : layer;
-                        const sldSymbolizers = rule && rule
-                        .map((symbol) => styleFunctions[symbol._] && styleFunctions[symbol._](symbol))
-                        .reduce((json, symbol) => {
-                            const key = head(Object.keys(symbol));
-                            return key && {...json, ...(symbol[key] ? {[key]: json[key] && [...json[key], symbol[key]] || [symbol[key]]} : {}) } || {...json};
-                        }, {}) || {};
-                        const sldInfoRule = general.reduce((infoRule, info) => info.value && {...infoRule, [info.name]: [info.value]} || {...infoRule}, {});    
-                        const filterRule = filtersFunctions.filters([filters]);
-                        const scalesDenominators = filtersFunctions.scalesDenominators(scales);
-                        return {...sldInfoRule, ...filterRule, ...scalesDenominators, ...sldSymbolizers};
-                    });
+            $am_onChangeScale(key, zoom, value) {
+                const scale = parseFloat(value);
+                this.setZoom({
+                    layerId: this.selectedLayer.id,
+                    scales: {
+                        ...this.scalesDenominator,
+                        [key]: scale,
+                        [zoom]: this.$am_nearIndex(scale)
+                    },
+                    currentZoom: Math.round(this.zoom)
+                })
+                
             },
             $am_onUpdateSLD(general, filters, rule, scales) {
-                const styledLayerDescriptor = styleFunctions.StyledLayerDescriptor(this.selectedLayer.name, this.selectedLayer.name, this.selectedLayer.name, [...this.$am_generateRules({general, filters, rule, scales})]);
-                const sld = xmlBuilder.buildObject(styledLayerDescriptor).replace(/\<\$_am\>|<\/\$_am\>/g, '');
-                this.$am_updateSLD({
-                    name: this.projectName + (this.selectedLayer.style || this.selectedLayer.name) + '~ecco~style',
-                    sld,
-                    general: [...general],
-                    filters: {...filters},
-                    rule: [...rule]
+                if (this.selectedLayer.type === 'layer') {
+                    const sldObj = getSLD(this.items, this.selectedLayer.name, this.selectedLayer.id, {general, filters, rule, scales});
+                    const sld = sldObj[this.selectedLayer.name];
+                    
+                    if (sld) {
+                        this.$am_updateSLD({
+                            name: this.projectName + this.selectedLayer.name + '~ecco~style',
+                            sld,
+                            general: [...general],
+                            filters: {...filters},
+                            rule: [...rule]
+                        });
+                    }
+                } else {
+                    const label = rule[0] && rule[0].label;
+                    const items = this.items.map(item => item.id === this.selectedLayer.id ? {...item, label, rule} : {...item});
+                    const layers = items.filter(item => item.groupId === this.selectedLayer.id).map(item => item.name).filter(name => !isNil(name));
+                    const sld = getSLD(items);
+                    const filteredSld = layers.reduce((newSld, name) => {
+                        return {
+                            ...newSld,
+                            [name]: sld[name]
+                        };
+                    }, {});
+                    if (!isEmpty(filteredSld)) {
+                        this.updateAllSLD(filteredSld);
+                    }
+                    
+                    this.updateLayers([...items]);
+                }
+            },
+            $am_nearIndex(scale) {
+                const scaleValue = scale && this.scalesRound.reduce((previous, current) => {
+                    return Math.abs(current - scale) < Math.abs(previous - scale) ? current : previous;
                 });
+                return this.scalesRound.indexOf(scaleValue);
             }
         }
     };

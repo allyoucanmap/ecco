@@ -12,14 +12,16 @@
 <template lang="html">
     <div
         id="am-gl"
-        class="am-gl"/>
+        class="am-gl"
+        @click="event => $am_getInfo(event)"
+        @dblclick="event =>$am_setCenter(event)"/>
 </template>
 
 <script>
     import gl from '../gl/index';
     import {mapGetters, mapActions} from 'vuex';
-    import {join, isEqual} from 'lodash';
-    import {pseudo} from '../utils/PrjUtils';
+    import {join, isEqual, head, isArray} from 'lodash';
+    import {pseudo, wgs84} from '../utils/PrjUtils';
 
     export default {
         data() {
@@ -110,13 +112,15 @@
                                 zoom: this.zoom
                             });
                         }
-                        
                         this.entities.forEach(ent => {
                             if (ent) {
                                 drawEntity(ent);
-                                if (this.oldSLD !== this.currentSLD && this.selectedLayer && ent.id === this.selectedLayer.name) {
-                                    updateEntityTexture(ent,  this.$am_getLayerUrl({
-                                        layer: this.selectedLayer,
+                                const layer = head(layers.filter(layer => layer.name === ent.id));
+                                const oldLayer = head(this.oldLayers.filter(layer => layer.name === ent.id));
+                                if (layer && oldLayer && layer.sld !== oldLayer.sld
+                                || this.oldSLD !== this.currentSLD && this.selectedLayer && ent.id === this.selectedLayer.name) {
+                                   updateEntityTexture(ent,  this.$am_getLayerUrl({
+                                        layer: layer,
                                         bbox: this.bbox,
                                         width: this.width,
                                         height: this.height
@@ -124,9 +128,12 @@
                                 }
                             }
                         });
+                        const oldOrder = join(this.oldLayers.map(layer => layer.id), ',');
+                        const order = join(layers.map(layer => layer.id), ',');
                         if (this.oldLayers.length !== layers.length
                         || this.oldZoom !== this.zoom
-                        || !isEqual(this.pseudo, this.oldPseudo)) {
+                        || !isEqual(this.pseudo, this.oldPseudo)
+                        || oldOrder !== order) {
                             this.entities.forEach(ent => {
                                 destroyEntity(ent);
                             });
@@ -174,7 +181,9 @@
         },
         methods: {
             ...mapActions({
-                setSize: 'app/setMapSize'
+                setSize: 'app/setMapSize',
+                setCenter: 'app/setMapCenter',
+                getInfo: 'app/getInfo'
             }),
             $am_getLayerUrl({layer, bbox, width, height}) {
                 const params = {
@@ -185,13 +194,51 @@
                     LAYERS: layer.name,
                     SRS: 'EPSG:900913',
                     TRANSPARENT: 'true',
-                    STYLES: this.projectName + (layer.style || layer.name) + '~ecco~style',
+                    STYLES: this.projectName + layer.name + '~ecco~style',
                     WIDTH: width,
                     HEIGHT: height,
                     BBOX: join(bbox, ','),
                     _d: Date.now()
                 };
                 return 'http://localhost:8080/geoserver/wms?'+ join(Object.keys(params).map(key => key + '=' + params[key]), '&');
+            },
+            $am_getInfo(event) {
+                const layers = this.layers.reduce((mergedLayers, layer) => ({...mergedLayers, [layer.name]: {...layer}}), {});
+                const layersNames = Object.keys(layers);
+                if (isArray(layersNames) && layersNames.length > 0) {
+                    const containerRect = this.$el.getBoundingClientRect();
+                    const x = event.clientX - containerRect.left;
+                    const y = event.clientY - containerRect.top;
+                    const width = 2;
+                    const height = 2;
+                    const center = [...this.pseudo];
+                    const coords = [
+                        center[0] + (-this.width / 2 + x) * this.resolutions[this.zoom],
+                        center[1] + (this.height / 2 - y) * this.resolutions[this.zoom]
+                    ];
+                    const bbox = [
+                        coords[0] - width / 2 * this.resolutions[this.zoom],
+                        coords[1] - height / 2 * this.resolutions[this.zoom],
+                        coords[0] + width / 2 * this.resolutions[this.zoom],
+                        coords[1] + height / 2 * this.resolutions[this.zoom]
+                    ];
+
+                    this.getInfo({
+                        params: {
+                            bbox: join(bbox, ','),
+                            request: 'GetFeatureInfo',
+                            query_layers: join(layersNames, ','),
+                            layers: join(layersNames, ','),
+                            width,
+                            height,
+                            crs: 'EPSG:3857',
+                            x: width / 2,
+                            y: height / 2,
+                            // info_format: 'application/json',
+                            feature_count: 10
+                        }
+                    });
+                }
             },
             $am_getLayers() {
                 const layers = this.layers.reduce((mergedLayers, layer) => ({...mergedLayers, [layer.name]: {...layer}}), {});
@@ -226,6 +273,18 @@
                     pseudo[0] + this.resolutions[zoom] * width / 2,
                     pseudo[1] + this.resolutions[zoom] * height / 2
                 ];
+            },
+            $am_setCenter(event) {
+                const containerRect = this.$el.getBoundingClientRect();
+                const x = event.clientX - containerRect.left;
+                const y = event.clientY - containerRect.top;
+
+                const center = [...this.pseudo];
+
+                this.setCenter(wgs84([
+                    center[0] + (-this.width / 2 + x) * this.resolutions[this.zoom],
+                    center[1] + (this.height / 2 - y) * this.resolutions[this.zoom]
+                ]));
             }
         }
     };

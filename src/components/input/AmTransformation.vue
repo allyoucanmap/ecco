@@ -36,12 +36,14 @@
 <template lang="html">
     <div class="am-transformation-filter">
         <div class="am-head">
-            <input v-model="name">
+            <input
+                :value="name"
+                @change="event => $am_onChangeName(event.target.value)">
             <button
                 v-if="onToggle"
                 class="am-icon"
                 @click="() => onToggle()">
-                V
+                8
             </button>
         </div>
         <am-input
@@ -202,6 +204,9 @@
                     list,
                     type: this.type
                 });
+            },
+            $am_onChangeName(name) {
+                this.name = name;
             }
         }
     };

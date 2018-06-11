@@ -4,11 +4,10 @@
 
 const express = require("express");
 const path = require('path');
-const port = 3000;
 const app = express();
 const proxy = require('express-http-proxy');
 
-const application = (before = () => {}) => {
+const application = (port = 3000, before = () => {}) => {
 
     before(app);
 
@@ -26,7 +25,7 @@ const application = (before = () => {}) => {
 
     app.use('/', proxy('http://localhost:8080/geoserver'));
 
-    app.use('http://localhost:3000/', function (req, res) {
+    app.use(`http://localhost:${port}/`, function (req, res) {
         res.sendFile(path.resolve('./index.html'));
     });
 

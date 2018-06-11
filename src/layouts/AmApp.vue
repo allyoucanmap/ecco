@@ -108,11 +108,17 @@
         background-color: #f2f2f2;
         box-shadow: -3px 0 6px rgba(0, 0, 0, 0.06), -4px 0 8px rgba(0, 0, 0, 0.12);
     }
-
     .am-tools {
         grid-column: 3 / 10;
         grid-row: 7 / 8;
         z-index: 5;
+        background-color: #f2f2f2;
+        box-shadow: -3px 0 6px rgba(0, 0, 0, 0.06), -4px 0 8px rgba(0, 0, 0, 0.12);
+    }
+    .am-info {
+        grid-column: 3 / 10;
+        grid-row: 5 / 7;
+        z-index: 4;
         background-color: #f2f2f2;
         box-shadow: -3px 0 6px rgba(0, 0, 0, 0.06), -4px 0 8px rgba(0, 0, 0, 0.12);
     }
@@ -403,6 +409,7 @@
         <am-gl/>
         <am-zoom-slider/>
         <am-tools />
+        <am-info />
     </div>
 </template>
 

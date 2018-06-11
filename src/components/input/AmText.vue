@@ -27,7 +27,7 @@
 
         props: {
             value: {
-                type: String,
+                type: [String, Number],
                 default: ''
             },
             onChange: {

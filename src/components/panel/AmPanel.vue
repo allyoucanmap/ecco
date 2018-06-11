@@ -50,6 +50,10 @@
 <script>
     export default {
         props: {
+            collapsed: {
+                type: Boolean,
+                default: true
+            },
             head: {
                 type: String,
                 default: ''
@@ -57,12 +61,24 @@
             onRemove: {
                 type: Function,
                 default: null
+            },
+            onExpand: {
+                type: Function,
+                default: () => {}
             }
         },
         data() {
             return {
                 expanded: false
             };
+        },
+        watch: {
+            expanded(expanded) {
+                this.onExpand(expanded);
+            }
+        },
+        created() {
+            this.expanded = !this.collapsed;
         },
         methods: {
             $am_onChange() {

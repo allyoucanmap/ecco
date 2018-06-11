@@ -1,19 +1,68 @@
 /* copyright 2018, stefano bovio @allyoucanmap. */
 
-import {head, isEmpty, isObject, isArray, capitalize, isNil} from 'lodash';
+import {head, isEmpty, isObject, isArray, capitalize, isNil, trim, startsWith, endsWith, trimStart, trimEnd} from 'lodash';
 import xml2js from 'xml2js';
 import {scales} from './PrjUtils';
+import uuidv1 from 'uuid/v1';
 
 const xmlParser = new xml2js.Parser();
+const xmlBuilder = new xml2js.Builder({
+    xmldec: {
+        version: '1.0',
+        encoding: 'ISO-8859-1',
+        standalone: false
+    },
+    renderOpts: {
+        pretty: false,
+        indent: '',
+        newline: ''
+    }
+});
 
 const hasParams = (params, keys) => head(keys.filter(key => head(Object.keys(params).filter(param => !isNil(params[param]) && param === key))));
 
-const getTransformationFunction = value => ({
-    'ogc:Function': {
-        'ogc:PropertyName': value.name || ' _am_ ',
-        'ogc:Literal': isArray(value.list) && [...(value.type === 'interpolate' ? [{value: 'color'}] : []), ...value.list].reverse().reduce((literals, {literal, value}) => [...literals, literal, value], []).filter(val => !isNil(val)) || [' _am_ ', ' _am_ '],
+const vendorOptions = (params = {}, keys = [], translate = {}) => hasParams(params, keys) && {
+    VendorOption: keys.filter(key => !isNil(params[key])).map(name => ({
         $: {
-            name: value.type && capitalize(value.type) || 'Recode'
+            name: translate[name] || name
+        },
+        _: params[name]
+    }))
+} || {};
+
+const functionTypes = [
+    {
+        name: 'env',
+        builder: literal => 'env(' + literal + ')'
+    }
+];
+
+const getFunction = (name) => {
+    const trimmedValue = trim(name);
+    const isFunction = head(functionTypes.filter(type => startsWith(trimmedValue, type.name + '(')));
+    
+    if (isFunction && endsWith(trimmedValue, ')')) {
+        const literal = trim(trimEnd(trimStart(name, isFunction.name + '('), ')'));
+        return {
+            'ogc:Function': {
+                $: {
+                    name: isFunction.name
+                },
+                'ogc:Literal': literal
+            }
+        }
+    }
+    return {
+        'ogc:PropertyName': name || ' _am_ '
+    };
+};
+
+const getTransformationFunction = obj => ({
+    'ogc:Function': {
+        ...getFunction(obj.name, obj.list),
+        'ogc:Literal': isArray(obj.list) && [...(obj.type === 'interpolate' ? [{value: 'color'}] : []), ...obj.list].reverse().reduce((literals, {literal, value}) => [...literals, literal, value], []).filter(val => !isNil(val)) || [' _am_ ', ' _am_ '],
+        $: {
+            name: obj.type && capitalize(obj.type) || 'Recode'
         }
     }
 });
@@ -188,7 +237,7 @@ const styleFunctions = {
             ...styleFunctions.fill(params)
         }
     } || {},
-    StyledLayerDescriptor: (name, title, abstract, rule = []) => ({
+    StyledLayerDescriptor: (name, title, abstract, featureTypeStyle = []) => ({
         StyledLayerDescriptor: {
             $: {
                 'version': '1.0.0',
@@ -206,11 +255,7 @@ const styleFunctions = {
                             ...(name && {Name: [name]} || {}),
                             ...(title && {Title: [title]} || {}),
                             ...(abstract && {Abstract: [abstract]} || {}),
-                            FeatureTypeStyle: [
-                                {
-                                    Rule: [...rule]
-                                }
-                            ]
+                            FeatureTypeStyle: [...featureTypeStyle]
                         }
                     ]
                 }
@@ -261,6 +306,12 @@ const TextSymbolizer = [
     'font-weight',
     'font-size',
     ...Fill
+];
+
+const FeatureTypeStyle = [
+    'label',
+    'sort-by',
+    'sort-by-group'
 ];
 
 const types = {
@@ -325,7 +376,8 @@ const types = {
         ]
     },
     'stroke-dasharray': {
-        format: 'text'
+        format: 'text',
+        transformation: true
     },
     'stroke-dashoffset': {
         format: 'text'
@@ -388,6 +440,12 @@ const types = {
             min: -360,
             max: 360
         }
+    },
+    'sort-by': {
+        format: 'text'
+    },
+    'sort-by-group': {
+        format: 'text'
     }
 };
 
@@ -418,12 +476,18 @@ const comparisonOperators = {
     },
     '<=': {
         _: 'PropertyIsLessThanOrEqualTo'
+    },
+    'isNull': {
+        _: 'PropertyIsNull',
+        validate: ({param}) => !isNil(param),
+        hideValue: true
     }
 };
 
 const filtersFunctions = {
     validate: filters => {
-        const validFilters = filters.filter(({param, value, operator, rules}) => param && value && operator || operator && rules);
+        const validFilters = filters.filter(({param, value, operator, rules}) => comparisonOperators[operator] && comparisonOperators[operator].validate && comparisonOperators[operator].validate({param, value, operator, rules}) || 
+            (!isNil(param) && !isNil(value) && !isNil(operator) || !isNil(operator) && !isNil(rules)));
         return head(validFilters) && validFilters;
     },
     writeObject: filters => {
@@ -431,11 +495,12 @@ const filtersFunctions = {
         const operators = {...logicalOperators, ...comparisonOperators};
         return validFilters && validFilters.reduce((newFilters, currentFilter) => {
             const filter = currentFilter && currentFilter.rules && currentFilter.rules.length === 1 && {...currentFilter.rules[0]} || {...currentFilter};
+            const hasValues = filter.param !== '' && (comparisonOperators[filter.operator] && (comparisonOperators[filter.operator].hideValue || !comparisonOperators[filter.operator].hideValue && filter.value !== ''));
             const rule = filter.rules ? {
                 ...filtersFunctions.writeObject(filter.rules)
             } : {
-                ...(filter.param !== '' && filter.value !== '' ? {'ogc:PropertyName': filter.param} : {}),
-                ...(filter.param !== '' && filter.value !== '' ? {'ogc:Literal': filter.value} : {})
+                ...(hasValues ? {'ogc:PropertyName': filter.param} : {}),
+                ...(hasValues && !comparisonOperators[filter.operator].hideValue ? {'ogc:Literal': filter.value} : {})
             };
             const obj = !isEmpty(rule) && {
                 [operators[filter.operator]._]: [
@@ -478,12 +543,19 @@ const parser = {
             label: PropertyName
         } || {}
     },
+    extractFunction: func => {
+        const funcName = func && func.$ && func.$.name;
+        const builder = head(functionTypes.filter(type => type.name === funcName).map(type => type.builder));
+        const literal = head(func && parser.fromKey('Literal', func) || []);
+        return !isNil(builder) && !isNil(literal) && builder(literal);
+    },
     extractTransformation: func => {
         const sldLiterals = parser.fromKey('Literal', func);
         const type = func && func.$ && func.$.name && func.$.name.toLowerCase();
-        const name =  head(parser.fromKey('PropertyName', func) || []);
+        const sldFunction = head(parser.fromKey('Function', func) || []);
+        const name =  head(parser.fromKey('PropertyName', func) || []) || parser.extractFunction(sldFunction);
         const firstValue = type === 'categorize' && isArray(sldLiterals) && [{value: sldLiterals[0]}] || [];
-
+        
         const literals = isArray(sldLiterals) && (
             type === 'recode' && [...sldLiterals]
             || type === 'categorize' && sldLiterals.filter((literal, idx) => idx > 0)
@@ -500,10 +572,13 @@ const parser = {
             ] : [...newList]
         }, []);
 
-        return !isNil(literals) && isArray(literals) && !isNil(type) && !isNil(name) && {
+        const finalList = [...firstValue, ...list].filter(val => !isNil(val));
+        return sldLiterals && ((type === 'categorize' && sldLiterals.length % 2 !== 0)
+        || (type !== 'categorize' && sldLiterals.length % 2 === 0))
+        && !isNil(literals) && isArray(literals) && !isNil(type) && !isNil(name) && {
             name,
             type,
-            list: [...firstValue, ...list].reverse()
+            list: [...finalList].reverse()
         } || '';
     },
     extractCSS: (key, rule) => {
@@ -613,13 +688,12 @@ const parser = {
                 ...rules
             ];
         }, []);
-
         return start ?
         {
             ...(orObj && orObj[0] || andObj && andObj[0] || {
                 type: 'group',
                 operator:  'AND',
-                rules: []
+                rules: [...comparisons]
             })
         }
         : 
@@ -650,27 +724,42 @@ const parser = {
         }; 
     },
     PointSymbolizer: rule => ({
+        _id: uuidv1(),
         _: 'PointSymbolizer',
         ...parser.extractCSS('Fill', rule),
         ...parser.extractCSS('Stroke', rule),
         ...parser.Mark(rule)
     }),
     LineSymbolizer: rule => ({
+        _id: uuidv1(),
         _: 'LineSymbolizer',
         ...parser.extractCSS('Stroke', rule),
         ...parser.PerpendicularOffset(rule)
     }),
     PolygonSymbolizer: rule => ({
+        _id: uuidv1(),
         _: 'PolygonSymbolizer',
         ...parser.extractCSS('Fill', rule),
         ...parser.extractCSS('Stroke', rule)
     }),
     TextSymbolizer: rule => ({
+        _id: uuidv1(),
         _: 'TextSymbolizer',
         ...parser.Label(rule),
         ...parser.extractCSS('Font', rule),
         ...parser.extractCSS('Fill', rule)
     })
+};
+
+const parseVendorOptions = (options = [], translate = {}) => {
+    return options.reduce((newOptions, option) => {
+        const name = option && option.$ && option.$.name;
+        const value = option && option._;
+        return {
+            ...newOptions,
+            ...(!isNil(name) && !isNil(value) ? {[translate[name] || name]: value} : {})
+        };
+    }, {});
 };
 
 const parseStyle = (sld, style = () => {}) => {
@@ -680,47 +769,159 @@ const parseStyle = (sld, style = () => {}) => {
             const NamedLayer = parser.fromKey('NamedLayer', StyledLayerDescriptor);
             const UserStyle = parser.fromKey('UserStyle', NamedLayer[0]);
             const FeatureTypeStyle = parser.fromKey('FeatureTypeStyle', UserStyle[0]);
-            const sldRules = parser.fromKey('Rule', FeatureTypeStyle[0]);
-            const rules = sldRules.map(sldRule => {
-                const general = parser.infoRule(sldRule);
-                const Filter = parser.fromKey('Filter', sldRule) || {
+            
+            const rules = FeatureTypeStyle.reduce((newRules, featureType) => {
+
+                const label = head(parser.fromKey('Name', featureType) || []);
+                const sldVendorOptions = parser.fromKey('VendorOption', featureType);
+                const vendor = parseVendorOptions(sldVendorOptions || [], {'sortBy': 'sort-by', 'sortByGroup': 'sort-by-group'});
+                const sldRules = parser.fromKey('Rule', featureType);
+                if (!sldRules) {
+                    return [
+                        ...newRules
+                    ];
+                }
+                const group = {
+                    id: uuidv1(),
+                    label,
                     type: 'group',
-                    operator:  'AND',
-                    rules: []
+                    rule: [
+                        {   
+                            _id: uuidv1(),
+                            _: 'FeatureTypeStyle',
+                            label,
+                            ...vendor
+                        }
+                    ]
                 };
-                const filters = Filter && parser.filters(Filter[0], true);
-                const sldPolygonSymbolizer = parser.fromKey('PolygonSymbolizer', sldRule);
-                const polygonSymbolizers = sldPolygonSymbolizer && sldPolygonSymbolizer.map(symbol => parser.PolygonSymbolizer(symbol)) || [];
-                const sldLineSymbolizer = parser.fromKey('LineSymbolizer', sldRule);
-                const lineSymbolizers = sldLineSymbolizer && sldLineSymbolizer.map(symbol => parser.LineSymbolizer(symbol)) || [];
-                const sldPointSymbolizer = parser.fromKey('PointSymbolizer', sldRule);
-                const pointSymbolizers = sldPointSymbolizer && sldPointSymbolizer.map(symbol => parser.PointSymbolizer(symbol)) || [];
-                const sldTextSymbolizer = parser.fromKey('TextSymbolizer', sldRule);
-                const textSymbolizers = sldTextSymbolizer && sldTextSymbolizer.map(symbol => parser.TextSymbolizer(symbol)) || [];
-                const rule = [
-                    ...polygonSymbolizers,
-                    ...lineSymbolizers,
-                    ...pointSymbolizers,
-                    ...textSymbolizers
+
+                const rules = sldRules.map(sldRule => {
+                    const general = parser.infoRule(sldRule);
+                    const Filter = parser.fromKey('Filter', sldRule) || {
+                        type: 'group',
+                        operator:  'AND',
+                        rules: []
+                    };
+                    const filters = Filter && parser.filters(Filter[0], true);
+                    const sldPolygonSymbolizer = parser.fromKey('PolygonSymbolizer', sldRule);
+                    const polygonSymbolizers = sldPolygonSymbolizer && sldPolygonSymbolizer.map(symbol => parser.PolygonSymbolizer(symbol)) || [];
+                    const sldLineSymbolizer = parser.fromKey('LineSymbolizer', sldRule);
+                    const lineSymbolizers = sldLineSymbolizer && sldLineSymbolizer.map(symbol => parser.LineSymbolizer(symbol)) || [];
+                    const sldPointSymbolizer = parser.fromKey('PointSymbolizer', sldRule);
+                    const pointSymbolizers = sldPointSymbolizer && sldPointSymbolizer.map(symbol => parser.PointSymbolizer(symbol)) || [];
+                    const sldTextSymbolizer = parser.fromKey('TextSymbolizer', sldRule);
+                    const textSymbolizers = sldTextSymbolizer && sldTextSymbolizer.map(symbol => parser.TextSymbolizer(symbol)) || [];
+                    const rule = [
+                        ...polygonSymbolizers,
+                        ...lineSymbolizers,
+                        ...pointSymbolizers,
+                        ...textSymbolizers
+                    ];
+
+                    return {
+                        groupId: group && group.id,
+                        id: uuidv1(),
+                        label: head(general.filter(field => field.name === 'Name').map(field => field.value)) || '',
+                        general,
+                        rule,
+                        scales: parser.scales(sldRule),
+                        filters,
+                        type: 'layer'
+                    };
+                });
+                return [
+                    ...newRules,
+                    ...(group && [group] || []),
+                    ...rules
                 ];
-                return {
-                    label: head(general.filter(field => field.name === 'Name').map(field => field.value)) || '',
-                    general,
-                    rule,
-                    scales: parser.scales(sldRule),
-                    filters
-                };
-            });
+            }, []);
+
             style({rules});
         }
     });
+};
+
+const getSLD = (items, name, id, currentFilter) => {
+    const groups = items.filter(item => item.type === 'group');
+    
+    const layers = items.filter(item => item.type === 'layer').reduce((objLayers, layer) => {
+        return {
+            ...objLayers,
+            [layer.name]: [...(objLayers[layer.name] || []), {...layer}]
+        };
+    }, {});
+
+    const styles = Object.keys(layers).reduce((newStructure, key) => {
+        return {
+            ...newStructure,
+            [key]: layers[key].reduce((featureTypes, layer) => {
+                const group = layer.groupId && head(groups.filter(grp => grp.id === layer.groupId)) || {};
+                const name = group.id || '_';
+                return {
+                    ...featureTypes,
+                    [name]: [...(featureTypes[name] || []), {...layer}]
+                };
+            },{})
+        }
+    }, {});
+
+    const selectedStyle = !isNil(name) && styles[name] && {[name]: styles[name]};
+
+    if (name && !selectedStyle) {
+        return {};
+    }
+
+    const slds = Object.keys(selectedStyle || styles).reduce((newRules, layerName) => {
+        const grps = Object.keys(styles[layerName]);
+        const order = ['_', ...groups.map(group => group.id)].filter(id => head(grps.filter(grp => grp + '' === id + '')));
+        const featureTypes = order.map(key => {
+            const data = styles[layerName][key].map(layer => {
+                const {general, filters, rule, scales} = !isNil(name) && id === layer.id ? currentFilter : layer;
+                const sldSymbolizers = rule && rule
+                    .map((symbol) => styleFunctions[symbol._] && styleFunctions[symbol._](symbol))
+                    .reduce((json, symbol) => {
+                        const key = head(Object.keys(symbol));
+                        return key && {...json, ...(symbol[key] ? {[key]: json[key] && [...json[key], symbol[key]] || [symbol[key]]} : {}) } || {...json};
+                    }, {}) || {};
+                const sldInfoRule = general.reduce((infoRule, info) => info.value && {...infoRule, [info.name]: [info.value]} || {...infoRule}, {});    
+                const filterRule = filtersFunctions.filters([filters]);
+                const scalesDenominators = filtersFunctions.scalesDenominators(scales);
+                return {
+                    ...sldInfoRule,
+                    ...filterRule,
+                    ...scalesDenominators,
+                    ...sldSymbolizers
+                };
+            });
+            const group = head(groups.filter(grp => grp.id + '' === key + '')) || {};
+            return {
+                Name: group.label || key,
+                Rule: [...data],
+                ...vendorOptions(group.rule && group.rule[0] || {}, ['sort-by', 'sort-by-group'], {'sort-by': 'sortBy', 'sort-by-group': 'sortByGroup'})
+            };
+        });
+        const styledLayerDescriptor = styleFunctions.StyledLayerDescriptor(
+            layerName,
+            layerName,
+            layerName,
+            [...featureTypes]
+        );
+        const sld = xmlBuilder.buildObject(styledLayerDescriptor).replace(/\<\$_am\>|<\/\$_am\>/g, '');
+        return {
+            ...newRules,
+            [layerName]: sld
+        };
+    }, {});
+
+    return slds;
 };
 
 const symbolizers = {
     PointSymbolizer,
     LineSymbolizer,
     PolygonSymbolizer,
-    TextSymbolizer
+    TextSymbolizer,
+    FeatureTypeStyle
 };
 
 const operators = {...comparisonOperators};
@@ -731,5 +932,6 @@ export {
     styleFunctions,
     operators,
     filtersFunctions,
-    parseStyle
+    parseStyle,
+    getSLD
 };

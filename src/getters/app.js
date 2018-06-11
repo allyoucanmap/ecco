@@ -23,5 +23,6 @@ export default {
     size: state => state.size || {width: 0, height: 0},
     width: state => state.size && state.size.width || 0,
     height: state => state.size && state.size.height || 0,
-    projectName: () => ''
+    projectName: () => '',
+    info: state => state.info || {}
 };

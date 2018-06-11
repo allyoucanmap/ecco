@@ -6,7 +6,7 @@
         "test": "echo \"Error: no test specified\" && exit 1",
         "clean": "rimraf dist",
         "start": "nodemon server/dev.js --ignore src/",
-        "startDist": "nodemon server/prod.js --ignore src/",
+        "server": "nodemon server/prod.js --ignore src/",
         "compile": "npm run clean && mkdirp ./dist && webpack --config prod-webpack.config.js"
     },
     "author": "stefano bovio",
@@ -46,6 +46,7 @@
         "pbf": "3.1.0",
         "proj4": "2.4.4",
         "tinycolor2": "1.4.1",
+        "uuid": "3.2.1",
         "vue": "2.5.9",
         "vue-color": "2.4.3",
         "vuex": "3.0.1",

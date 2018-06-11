@@ -13,6 +13,9 @@ const SET_MAP_SIZE = 'SET_MAP_SIZE';
 const SET_MAP_CENTER = 'SET_MAP_CENTER';
 const UPDATE_LAYERS = 'UPDATE_LAYERS';
 const UPDATE_LAYER = 'UPDATE_LAYER';
+const UPDATE_ALL_SLD = 'UPDATE_ALL_SLD';
+const GET_INFO = 'GET_INFO';
+const CLEAR_INFO = 'CLEAR_INFO';
 
 const errorSLD = ({ commit }, error) => {
     commit({
@@ -54,7 +57,7 @@ const updateStyle = (options, response = () => {}, error = () => {}) => {
         response({...options});
     })
     .catch(e => {
-        if (e && e.response && e.response.status === 404) {
+        if (e && e.response && (e.response.status === 404 || e.response.status === 400)) {
             error('Style not found');
             axios.post('/geoserver/rest/styles', options.sld, {
                 params: {
@@ -80,30 +83,65 @@ const deleteStyle = ({ commit }, options) => {
     .catch(() => {});
 };
 
+const clearInfo = ({commit}) => {
+    commit({
+        type: CLEAR_INFO
+    });
+};
+
+const getInfo = ({commit}, options) => {
+    clearInfo({commit});
+    axios.get('/geoserver/wms', {
+        params: {
+            ...(options.params ? options.params : {})
+        }
+    }).then(({data}) => {
+        commit({
+            type: GET_INFO,
+            data
+        });
+    });
+};
+
+
 export default {
     actions: {
         addLayer({ commit }, layer) {
-            getStyle({
-                name: layer.name + '~ecco~style' + '.sld'
-            }, sld => {
-                updateStyle({
-                    name: layer.name + '~ecco~style~tmp',
-                    sld
-                });
-                parseStyle(sld, ({rules = []}) => {
-                    rules.forEach(rule => {
-                        commit({
-                            type: ADD_LAYER,
-                            layer: {...layer, id: Date.now(), ...rule}
-                        });
-                    });
-                });
-            }, () => {
+            if (layer.type === 'group') {
                 commit({
                     type: ADD_LAYER,
                     layer
                 });
-            });
+            } else {
+                getStyle({
+                    name: (layer.style || layer.name + '~ecco~style') + '.sld'
+                }, sld => {
+                    updateStyle({
+                        name: layer.name + '~ecco~style~tmp',
+                        sld
+                    });
+                    parseStyle(sld, ({rules = []}) => {
+                        if (rules.length > 0) {
+                            rules.forEach(rule => {
+                                commit({
+                                    type: ADD_LAYER,
+                                    layer: {...(rule.type === 'layer' ? layer : {}), ...rule}
+                                });
+                            });
+                        } else {
+                            commit({
+                                type: ADD_LAYER,
+                                layer
+                            });
+                        }
+                    });
+                }, () => {
+                    commit({
+                        type: ADD_LAYER,
+                        layer
+                    });
+                });
+            }
         },
         selectLayer({ commit }, id) {
             commit({
@@ -149,12 +187,33 @@ export default {
         },
         updateCurrentSLD,
         getStyle,
+        clearInfo,
+        getInfo,
         updateStyle ({ commit }, options) {
             updateStyle(options, () => {
                 updateCurrentSLD({ commit }, {...options});
             },
             error => {
                 errorSLD({ commit }, error);
+            });
+        },
+        updateAllSLD ({ commit }, sldObj) {
+            Object.keys(sldObj).forEach(name => {
+                updateStyle({
+                    name: name + '~ecco~style',
+                    sld: sldObj[name]
+                }, () => {
+                    commit({
+                        type: UPDATE_ALL_SLD,
+                        options: {
+                            name,
+                            sld: sldObj[name]
+                        }
+                    });
+                },
+                error => {
+                    errorSLD({ commit }, error);
+                });
             });
         },
         deleteStyle
@@ -168,5 +227,8 @@ export default {
     SET_MAP_SIZE,
     SET_MAP_CENTER,
     UPDATE_LAYERS,
-    UPDATE_LAYER
+    UPDATE_LAYER,
+    UPDATE_ALL_SLD,
+    CLEAR_INFO,
+    GET_INFO
 };

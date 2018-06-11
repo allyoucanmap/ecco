@@ -15,7 +15,7 @@
         border: 1px solid rgba(0, 0, 0, 0.12);
     }
     .am-list .am-item.am-selected {
-        background-color: #eeeeee;
+        background-color: #91f3f7;
     }
     .am-list .am-item.am-selected > div {
         color: #333333;
@@ -107,7 +107,7 @@
             <button
                 class="inverse am-icon"
                 @click="() => $am_openModal('group')">
-                H
+                I
             </button>
             <button
                 class="am-icon"
@@ -159,7 +159,7 @@
                 </div>
                 <div class="am-footer">
                     <button
-                        :class="`am-icon ${form[0] && !form[0].value && 'am-disabled' || ''}`"
+                        :class="`am-icon ${type === 'layer' && form[0] && !form[0].value && 'am-disabled' || ''}`"
                         @click="() => $am_addLayer()">
                         P
                     </button>
@@ -185,6 +185,8 @@
     import AmSortableList from './list/AmSortableList.vue';
     import AmDropdown from './input/AmDropdown.vue';
     import xml2js from 'xml2js';
+    import {getSLD} from '../utils/SLDUtils';
+    import uuidv1 from 'uuid/v1';
 
     const xmlParser = new xml2js.Parser();
     
@@ -259,18 +261,21 @@
                 addLayer: 'app/addLayer',
                 selectLayer: 'app/selectLayer',
                 setBackgroundColor: 'app/setBackgroundColor',
-                updateLayers: 'app/updateLayers' 
+                updateLayers: 'app/updateLayers',
+                updateAllSLD: 'app/updateAllSLD',
             }),
             $am_addLayer() {
                 this.add = false;
+                const id = uuidv1();
                 const values = this.form.reduce((newValues, field) => ({...newValues, [field.name]: field.value}), {});
-                this.addLayer({...(this.type === 'layer' ? this.defaultLayer : {}), id: Date.now(), ...values, type: this.type});
+                this.addLayer({...(this.type === 'layer' ? this.defaultLayer : {}), id, ...values, type: this.type});
                 this.form = this.form.map(field => ({...field, value: undefined}));
             },
             $am_selectLayer(id) {
                 this.selectLayer(this.selectedLayer.id === id ? null : id);
             },
             $am_updateLayers(layers) {
+                this.updateAllSLD(getSLD(layers));
                 this.updateLayers([...layers]);
             },
             $am_toggleColor(e){

@@ -1,10 +1,12 @@
-/* copyright 2017, stefano bovio @allyoucanmap. */
+/* copyright 2018, stefano bovio @allyoucanmap. */
 
 import Vue from 'vue';
 import Vuex from 'vuex';
 import createLogger from 'vuex/dist/logger';
 
 Vue.use(Vuex);
+
+const debug = window.location && window.location.search && window.location.search === '?debug';
 
 const requireActions = require.context('./actions/', true, /\.js$/);
 const requireMutations = require.context('./mutations/', true, /\.js$/);
@@ -27,7 +29,7 @@ const modules = requireActions.keys().reduce((mdls, key) => {
 
 const store = new Vuex.Store({
     modules,
-    plugins: process.env.NODE_ENV !== 'production'
+    plugins: process.env.NODE_ENV !== 'production' && debug
         ? [createLogger({ collapsed: false })]
         : []
 });

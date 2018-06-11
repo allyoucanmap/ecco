@@ -60,7 +60,7 @@
                 <button
                     class="am-icon"
                     @click="() => $am_onAddFilter('group')">
-                    H
+                    I
                 </button>
             </div>
         </div>

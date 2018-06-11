@@ -21,7 +21,7 @@ webpackConfig.plugins = [
         }
     }),
     new ParallelUglifyPlugin({
-        uglifyJS: {
+        uglifyES: {
             sourceMap: false,
             compress: { warnings: false },
             mangle: true
