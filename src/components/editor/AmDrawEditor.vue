@@ -124,7 +124,7 @@
 </template>
 
 <script>
-import { range, isEqual } from 'lodash';
+import { range, isEqual, startsWith, trim } from 'lodash';
 import { mapValue, inside } from '../../utils/Utils';
 
 export default {
@@ -245,7 +245,7 @@ export default {
       }, "");
     },
     $_am_updateWKT(geometry) {
-      return geometry.reduce((w, geom, i) => {
+      const geom = geometry.reduce((w, geom, i) => {
         const end = i === geometry.length - 1 ? ")" : ", ";
         const g = [...geom, geom[0]];
         return (
@@ -263,12 +263,14 @@ export default {
           end
         );
       }, "MULTIPOLYGON(");
+
+      return geom === 'MULTIPOLYGON(' ? 'MULTIPOLYGON()' : geom;
     },
     $_am_getWKT(wkt) {
-      const isValid = (wkt && wkt.match(/MULTIPOLYGON/)) || null;
+      const isValid = startsWith(trim(wkt), 'wkt://') || null;
       if (isValid) {
         const geometryString = wkt
-          .replace(/MULTIPOLYGON|wkt|\[|\]/g, "")
+          .replace(/MULTIPOLYGON|wkt\:\/\/|wkt|\[|\]/g, "")
           .replace(/\(/g, "[")
           .replace(/\)/g, "]")
           .replace(

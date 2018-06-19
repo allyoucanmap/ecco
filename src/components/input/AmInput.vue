@@ -30,6 +30,10 @@
             v-if="format === 'text'"
             :value="value"
             :on-change="text => onChange(text)"/>
+        <am-mark
+            v-if="format === 'mark'"
+            :value="value"
+            :on-change="mark => onChange(mark)"/>
         <am-select
             v-if="format === 'select'"
             :value="value"
@@ -50,13 +54,15 @@
     import AmSelect from './AmSelect.vue';
     import AmSlider from './AmSlider.vue';
     import AmText from './AmText.vue';
+    import AmMark from './AmMark.vue';
 
     export default {
         components: {
             AmColor,
             AmSelect,
             AmSlider,
-            AmText
+            AmText,
+            AmMark
         },
         props: {
             value: {

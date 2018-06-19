@@ -488,7 +488,7 @@ const types = {
         active: params => isNil(params['mark-wellknownname'])
     },
     'wellknownname': {
-        format: 'text'
+        format: 'mark'
     },
     'url': {
         format: 'text'
@@ -546,7 +546,7 @@ const types = {
         format: 'text'
     },
     'mark-wellknownname': {
-        format: 'text',
+        format: 'mark',
         active: params => isNil(params.stroke)
     },
     'mark-size': {
@@ -614,7 +614,7 @@ const types = {
         active: params => !isNil(params['mark-wellknownname'])
     },
     'pattern-wellknownname': {
-        format: 'text',
+        format: 'mark',
         active: params => isNil(params.fill)
     },
     'pattern-size': {
