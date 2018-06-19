@@ -22,9 +22,17 @@
         height: 21px;
         width: 21px;
         padding: 0;
+        user-select: none;
+        -ms-user-select: none;
+        -moz-user-select: none;
+        -webkit-user-select: none;
     }
     button.am-icon span {
         font-family: icone;
+        user-select: none;
+        -ms-user-select: none;
+        -moz-user-select: none;
+        -webkit-user-select: none;
     }
     button.inverse {
         background-color: #333333;
@@ -68,7 +76,7 @@
         height: 100%;
         display: grid;
         grid-template-columns: 200px 400px repeat(7, 1fr) 32px;
-        grid-template-rows: 32px repeat(5, 1fr) 32px;
+        grid-template-rows: 32px repeat(5, 1fr) 32px 4px;
     }
     .am-header {
         grid-column: 1 / 11;
@@ -121,6 +129,10 @@
         z-index: 4;
         background-color: #f2f2f2;
         box-shadow: -3px 0 6px rgba(0, 0, 0, 0.06), -4px 0 8px rgba(0, 0, 0, 0.12);
+    }
+    .am-loader {
+        grid-column: 1 / 11;
+        grid-row: 8 / 9;
     }
 
     /*! nouislider - 10.1.0 - 2017-07-28 17:11:18 */
@@ -408,8 +420,9 @@
         <am-editor/>
         <am-gl/>
         <am-zoom-slider/>
-        <am-tools />
-        <am-info />
+        <am-tools/>
+        <am-info/>
+        <am-loader/>
     </div>
 </template>
 

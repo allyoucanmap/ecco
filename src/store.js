@@ -3,8 +3,17 @@
 import Vue from 'vue';
 import Vuex from 'vuex';
 import createLogger from 'vuex/dist/logger';
-
+import {cloneDeep} from 'lodash';
+import history from './history';
 Vue.use(Vuex);
+
+const undoRedo = store => {
+    history.init(store);
+    history.add(cloneDeep({...store.state}));
+    store.subscribe((mutation, state) => {
+        history.add(cloneDeep({...state}));
+    });
+};
 
 const debug = window.location && window.location.search && window.location.search === '?debug';
 
@@ -30,8 +39,8 @@ const modules = requireActions.keys().reduce((mdls, key) => {
 const store = new Vuex.Store({
     modules,
     plugins: process.env.NODE_ENV !== 'production' && debug
-        ? [createLogger({ collapsed: false })]
-        : []
+        ? [undoRedo, createLogger({ collapsed: false })]
+        : [undoRedo]
 });
 
 export default store;

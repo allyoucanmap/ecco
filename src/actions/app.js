@@ -1,7 +1,8 @@
 /* copyright 2018, stefano bovio @allyoucanmap. */
 
-import axios from 'axios';
 import {parseStyle} from '../utils/SLDUtils';
+import styleAPI from '../api/style';
+import wmsAPI from '../api/wms';
 
 const ADD_LAYER = 'ADD_LAYER';
 const UPDATE_CURRENT_SLD = 'UPDATE_CURRENT_SLD';
@@ -16,6 +17,9 @@ const UPDATE_LAYER = 'UPDATE_LAYER';
 const UPDATE_ALL_SLD = 'UPDATE_ALL_SLD';
 const GET_INFO = 'GET_INFO';
 const CLEAR_INFO = 'CLEAR_INFO';
+const LOADING = 'LOADING';
+const UPDATE_SETTINGS = 'UPDATE_SETTINGS';
+const GET_CAPABILITIES = 'GET_CAPABILITIES';
 
 const errorSLD = ({ commit }, error) => {
     commit({
@@ -31,56 +35,11 @@ const updateCurrentSLD = ({ commit }, options) => {
     });
 };
 
-const getStyle = (options, response = () => {}, error = () => {}) => {
-    axios.get(`/geoserver/rest/styles/${options.name}`, {
-        params: {
-            ...options.params
-        }
-    })
-    .then(({data}) => {
-        response(data);
-    })
-    .catch(e => {
-        if (e && e.response && e.response.status === 404) {
-            error('Style not found');
-        }
+const loading = ({ commit }, load) => {
+    commit({
+        type: LOADING,
+        load
     });
-};
-
-const updateStyle = (options, response = () => {}, error = () => {}) => {
-    axios.put(`/geoserver/rest/styles/${options.name}`, options.sld, {
-        headers: {
-            'Content-Type': 'application/vnd.ogc.sld+xml'
-        }
-    })
-    .then(() => {
-        response({...options});
-    })
-    .catch(e => {
-        if (e && e.response && (e.response.status === 404 || e.response.status === 400)) {
-            error('Style not found');
-            axios.post('/geoserver/rest/styles', options.sld, {
-                params: {
-                    name: options.name
-                },
-                headers: {
-                    'Content-Type': 'application/vnd.ogc.sld+xml'
-                }
-            })
-            .then(() => {
-                response({...options});
-            })
-            .catch(() => {
-                error('Style not created');
-            });
-        }
-    });
-};
-
-const deleteStyle = ({ commit }, options) => {
-    axios.delete(`/geoserver/rest/styles/${options.name}`)
-    .then(() => {})
-    .catch(() => {});
 };
 
 const clearInfo = ({commit}) => {
@@ -89,50 +48,50 @@ const clearInfo = ({commit}) => {
     });
 };
 
-const getInfo = ({commit}, options) => {
-    clearInfo({commit});
-    axios.get('/geoserver/wms', {
-        params: {
-            ...(options.params ? options.params : {})
-        }
-    }).then(({data}) => {
-        commit({
-            type: GET_INFO,
-            data
-        });
-    });
-};
-
-
 export default {
     actions: {
-        addLayer({ commit }, layer) {
+        addLayer({ commit, state }, layer) {
+
+            const settings = {...state.settings};
+
+            loading({ commit }, true);
             if (layer.type === 'group') {
                 commit({
                     type: ADD_LAYER,
                     layer
                 });
+                loading({ commit }, false);
             } else {
-                getStyle({
-                    name: (layer.style || layer.name + '~ecco~style') + '.sld'
+                styleAPI.getStyle({
+                    options: {
+                        name: (layer.style || layer.name + '~ecco~style') + '.sld'
+                    },
+                    settings
                 }, sld => {
-                    updateStyle({
-                        name: layer.name + '~ecco~style~tmp',
-                        sld
+                    styleAPI.updateStyle({
+                        options: {
+                            name: layer.name + '~ecco~style~tmp',
+                            sld
+                        },
+                        settings
                     });
                     parseStyle(sld, ({rules = []}) => {
                         if (rules.length > 0) {
-                            rules.forEach(rule => {
+                            rules.forEach((rule, idx) => {
                                 commit({
                                     type: ADD_LAYER,
                                     layer: {...(rule.type === 'layer' ? layer : {}), ...rule}
                                 });
+                                if (idx === rules.length - 1) {
+                                    loading({ commit }, false);
+                                }
                             });
                         } else {
                             commit({
                                 type: ADD_LAYER,
                                 layer
                             });
+                            loading({ commit }, false);
                         }
                     });
                 }, () => {
@@ -140,6 +99,7 @@ export default {
                         type: ADD_LAYER,
                         layer
                     });
+                    loading({ commit }, false);
                 });
             }
         },
@@ -186,22 +146,48 @@ export default {
             });
         },
         updateCurrentSLD,
-        getStyle,
         clearInfo,
-        getInfo,
-        updateStyle ({ commit }, options) {
-            updateStyle(options, () => {
+        getInfo: ({commit, state}, options) => {
+            loading({ commit }, true);
+            clearInfo({commit});
+            const settings = {...state.settings};
+            wmsAPI.getInfo({options, settings},
+                data => {
+                    commit({
+                        type: GET_INFO,
+                        data
+                    });
+                    loading({ commit }, false);
+                }, () => {
+                    loading({ commit }, false);
+                }
+            );
+        },
+        updateStyle ({ commit, state }, options) {
+            const settings = {...state.settings};
+            loading({ commit }, true);
+            styleAPI.updateStyle({
+                options,
+                settings
+            }, () => {
                 updateCurrentSLD({ commit }, {...options});
+                loading({ commit }, false);
             },
             error => {
                 errorSLD({ commit }, error);
+                loading({ commit }, false);
             });
         },
-        updateAllSLD ({ commit }, sldObj) {
+        updateAllSLD ({ commit, state }, sldObj) {
+            const settings = {...state.settings};
+            loading({ commit }, true);
             Object.keys(sldObj).forEach(name => {
-                updateStyle({
-                    name: name + '~ecco~style',
-                    sld: sldObj[name]
+                styleAPI.updateStyle({
+                    options: {
+                        name: name + '~ecco~style',
+                        sld: sldObj[name]
+                    },
+                    settings
                 }, () => {
                     commit({
                         type: UPDATE_ALL_SLD,
@@ -210,13 +196,35 @@ export default {
                             sld: sldObj[name]
                         }
                     });
+                    loading({ commit }, false);
                 },
                 error => {
                     errorSLD({ commit }, error);
+                    loading({ commit }, false);
                 });
             });
         },
-        deleteStyle
+        updateSettings({ commit }, settings) {
+            commit({
+                type: UPDATE_SETTINGS,
+                settings
+            });
+        },
+        getCapabilities({ commit, state }) {
+            loading({ commit }, true);
+            const settings = {...state.settings};
+            wmsAPI.getCapabilities({settings},
+                capabilities => {
+                    commit({
+                        type: GET_CAPABILITIES,
+                        capabilities
+                    });
+                    loading({ commit }, false);
+                },
+                () => loading({ commit }, false)
+            )
+        },
+        loading
     },
     ADD_LAYER,
     UPDATE_CURRENT_SLD,
@@ -230,5 +238,8 @@ export default {
     UPDATE_LAYER,
     UPDATE_ALL_SLD,
     CLEAR_INFO,
-    GET_INFO
+    GET_INFO,
+    LOADING,
+    UPDATE_SETTINGS,
+    GET_CAPABILITIES
 };

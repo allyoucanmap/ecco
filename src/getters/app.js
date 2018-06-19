@@ -24,5 +24,8 @@ export default {
     width: state => state.size && state.size.width || 0,
     height: state => state.size && state.size.height || 0,
     projectName: () => '',
-    info: state => state.info || {}
+    info: state => state.info || {},
+    loading: state => state.loading ? true : false,
+    layersList: state => state.capabilities && state.capabilities.layers || [],
+    settings: state => state.settings || {}
 };

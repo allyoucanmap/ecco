@@ -111,9 +111,8 @@
                 setCenter: 'app/setMapCenter'
             }),
             $am_onKeyDown(e) {
-                if (!this.pressed) {
+                if (!this.keys[e.key]) {
                     this.keys = {...this.keys, [e.key]: true};
-                    this.pressed = true;
                 }
             },
             $am_onSelect(id){
@@ -122,7 +121,6 @@
             },
             $am_onKeyUp(e) {
                 this.keys = {...this.keys, [e.key]: false};
-                this.pressed = false;
                 this.tools = this.tools.map(tool => ({...tool, selected: false}));
             },
             $am_onMove(x, y) {

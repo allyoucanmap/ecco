@@ -178,18 +178,13 @@
 </template>
 
 <script>
-    import axios from 'axios';
     import {mapGetters, mapActions} from 'vuex';
     import {Chrome} from 'vue-color';
-    import {get} from 'lodash';
     import AmSortableList from './list/AmSortableList.vue';
     import AmDropdown from './input/AmDropdown.vue';
-    import xml2js from 'xml2js';
     import {getSLD} from '../utils/SLDUtils';
     import uuidv1 from 'uuid/v1';
 
-    const xmlParser = new xml2js.Parser();
-    
     export default {
         components: {
             Chrome,
@@ -209,6 +204,10 @@
                         family: 'layer'
                     },
                     {
+                        name: 'prefix',
+                        family: 'layer'
+                    },
+                    {
                         name: 'label'
                     }
                 ],
@@ -223,15 +222,15 @@
                 colors: {
                     hex: ''
                 },
-                type: '',
-                layers: []
+                type: ''
             };
         },
         computed: {
             ...mapGetters({
                 items: 'app/items',
                 selectedLayer: 'app/selectedLayer',
-                backgroundColor: 'app/backgroundColor'
+                backgroundColor: 'app/backgroundColor',
+                layers: 'app/layersList'
             })
         },
          watch: {
@@ -240,19 +239,7 @@
             },
             add(newAdd, oldAdd) {
                 if (newAdd && !oldAdd) {
-                    this.layers = [];
-                    axios.get('/geoserver/wms', {
-                        params: {
-                            service: 'wms',
-                            version: '1.1.1',
-                            request: 'GetCapabilities'
-                        }
-                    }).then((response) => {
-                        xmlParser.parseString(response.data, (error, capabilities) => {
-                            const layers = get(capabilities, 'WMT_MS_Capabilities.Capability[0].Layer[0].Layer');
-                            this.layers = layers && layers.map(layer => layer.Name && layer.Name[0]).filter(val => val) || [];
-                        });
-                    });
+                    this.getCapabilities();
                 }
             }
         },
@@ -263,6 +250,7 @@
                 setBackgroundColor: 'app/setBackgroundColor',
                 updateLayers: 'app/updateLayers',
                 updateAllSLD: 'app/updateAllSLD',
+                getCapabilities: 'app/getCapabilities'
             }),
             $am_addLayer() {
                 this.add = false;

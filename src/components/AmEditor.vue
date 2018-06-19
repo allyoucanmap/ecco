@@ -98,13 +98,15 @@
                     head: symbol._,
                     _id: symbol._id, 
                     _: symbol._, 
-                    params: symbolizers[symbol._].map(param => ({
-                        value: symbol[param],
-                        label: param.replace('-', ' '),
-                        option: types[param] && types[param].base,
-                        type: types[param],
-                        name: param
-                    }))
+                    params: symbolizers[symbol._]
+                        .filter(param => types[param] && (!types[param].active || types[param].active && types[param].active(symbol)))
+                        .map(param => ({
+                            value: symbol[param],
+                            label: param.replace('-', ' '),
+                            option: types[param] && types[param].base,
+                            type: types[param],
+                            name: param
+                        }))
                 }))"
                 :on-change="(items) => $am_onChange(items)"/>
         </div>
@@ -175,7 +177,8 @@
                 scalesDenominator: 'app/scalesDenominator',
                 scalesRound: 'app/scalesRound',
                 zoom: 'app/zoom',
-                items: 'app/items'
+                items: 'app/items',
+                auth: 'app/auth'
             })
         },
         watch: {
@@ -236,7 +239,7 @@
                 $am_updateSLD: 'app/updateStyle',
                 setZoom: 'app/setZoom',
                 updateLayers: 'app/updateLayers',
-                updateAllSLD: 'app/updateAllSLD',
+                updateAllSLD: 'app/updateAllSLD'
             }),
             $am_onChangeGeneral(key, value) {
                 if (key) {
@@ -266,17 +269,26 @@
                 this.filters = {...filters};
             },
             $am_onChangeScale(key, zoom, value) {
-                const scale = parseFloat(value);
+                const scale = !isNil(value) && parseFloat(value);
+                const scales = !scale ?
+                Object.keys(this.scalesDenominator || {}).reduce((newScales, param) => {
+                    return param !== zoom && param !== key && {
+                        ...newScales,
+                        [param]: this.scalesDenominator[param]
+                    } || {...newScales};
+                }, {}) :
+                {
+                    ...this.scalesDenominator,
+                    [key]: scale,
+                    [zoom]: this.$am_nearIndex(scale)
+                };
+
                 this.setZoom({
                     layerId: this.selectedLayer.id,
-                    scales: {
-                        ...this.scalesDenominator,
-                        [key]: scale,
-                        [zoom]: this.$am_nearIndex(scale)
-                    },
+                    scales,
                     currentZoom: Math.round(this.zoom)
-                })
-                
+                });
+          
             },
             $am_onUpdateSLD(general, filters, rule, scales) {
                 if (this.selectedLayer.type === 'layer') {

@@ -502,7 +502,7 @@ const getModelFromFeature = feature => {
     }
 };
 
-const entity = ({id, feature, model, scale, position, rotation, origin, color, type, textureUrl} = {}) => ({
+const entity = ({id, feature, model, scale, position, rotation, origin, color, type, textureUrl, textureCallback = () => {}} = {}) => ({
     id,
     position: checkEntityValue(position) || [0, 0, 0],
     rotation: checkEntityValue(rotation) || [0, 0, 0],
@@ -510,18 +510,19 @@ const entity = ({id, feature, model, scale, position, rotation, origin, color, t
     origin: checkEntityValue(origin) || [0, 0, 0],
     color: color && getColor(color) || [1.0, 1.0, 1.0, 1.0],
     type: feature && checkType(feature) || type || '_',
-    texture: textureUrl && bindTextureFromUrl(gl, textureUrl) || null,
+    texture: textureUrl && bindTextureFromUrl(gl, textureUrl, (texture) => textureCallback(texture)) || null,
     model: createModel(gl, feature && getModelFromFeature(feature) || model || {
         index: [0, 1, 3, 3, 1, 2],
         coordinates: [-1.0, 1.0, 0.0, -1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0]
     })
 });
 
-const updateEntityTexture = (entity, textureUrl) => {
+const updateEntityTexture = (entity, textureUrl, callback = () => {}) => {
     let tmpTexture = entity.texture;
     bindTextureFromUrl(gl, textureUrl, (texture) => {
         entity.texture = texture;
         destroyTextureFromUrl(gl, tmpTexture);
+        callback();
     }) || null;
 };
 

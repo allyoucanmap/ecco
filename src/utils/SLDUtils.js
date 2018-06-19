@@ -19,6 +19,34 @@ const xmlBuilder = new xml2js.Builder({
     }
 });
 
+const uom = [
+    'px',
+    'm',
+    'ft'
+];
+
+const buildValue = value => {
+    if (isObject(value) && !isNil(value.unit) && !isNil(value.number)) {
+        return value.unit === 'px' || value.unit === '' ? value.number : value.number + value.unit;
+    }
+    return value;
+};
+
+const parseValue = value => {
+    const valueWithUnit = head(uom.map(unit => {
+        if (endsWith(value, unit)) {
+            const val = value.split(unit);
+            const number = parseFloat(val[0]);
+            return isNaN(number) ? null : {
+                number,
+                unit
+            };
+        }
+        return null;
+    }).filter(val => val));
+    return valueWithUnit || value;
+};
+
 const hasParams = (params, keys) => head(keys.filter(key => head(Object.keys(params).filter(param => !isNil(params[param]) && param === key))));
 
 const vendorOptions = (params = {}, keys = [], translate = {}) => hasParams(params, keys) && {
@@ -59,19 +87,19 @@ const getFunction = (name) => {
 
 const getTransformationFunction = obj => ({
     'ogc:Function': {
-        ...getFunction(obj.name, obj.list),
-        'ogc:Literal': isArray(obj.list) && [...(obj.type === 'interpolate' ? [{value: 'color'}] : []), ...obj.list].reverse().reduce((literals, {literal, value}) => [...literals, literal, value], []).filter(val => !isNil(val)) || [' _am_ ', ' _am_ '],
+        ...getFunction(obj.name),
+        'ogc:Literal': isArray(obj.list) && [...(obj.type === 'interpolate' ? [{value: 'color'}] : []), ...obj.list].reverse().reduce((literals, {literal, value}) => [...literals, literal, buildValue(value)], []).filter(val => !isNil(val)) || [' _am_ ', ' _am_ '],
         $: {
             name: obj.type && capitalize(obj.type) || 'Recode'
         }
     }
 });
 
-const getCSSParam = (params, key) => !isNil(params[key]) &&
+const getCSSParam = (params, key, prefix) => !isNil(params[prefix + key]) &&
 [
     {
         CssParameter: {
-            ...(isObject(params[key]) && getTransformationFunction(params[key]) || { _: params[key] }),
+            ...(isObject(params[prefix + key]) && !params[prefix + key].number && !params[prefix + key].unit && getTransformationFunction(params[prefix + key]) || { _: buildValue(params[prefix + key]) }),
             $: {
                 name: key
             }
@@ -80,38 +108,38 @@ const getCSSParam = (params, key) => !isNil(params[key]) &&
 ] || [];
 
 const styleFunctions = {
-    fill: (params = {}) => hasParams(params, [
-        'fill',
-        'fill-opacity'
+    fill: (params = {}, prefix = '') => hasParams(params, [
+        prefix + 'fill',
+        prefix + 'fill-opacity'
     ]) && {
         Fill: [
             {
                 $_am: [
-                    ...getCSSParam(params, 'fill'),
-                    ...getCSSParam(params, 'fill-opacity')
+                    ...getCSSParam(params, 'fill', prefix),
+                    ...getCSSParam(params, 'fill-opacity', prefix)
                 ]
             }
         ]
     } || {},
-    stroke: (params = {}) => hasParams(params, [
-        'stroke',
-        'stroke-width',
-        'stroke-opacity',
-        'stroke-linejoin',
-        'stroke-linecap',
-        'stroke-dasharray',
-        'stroke-dashoffset'
+    stroke: (params = {}, prefix = '') => hasParams(params, [
+        prefix + 'stroke',
+        prefix + 'stroke-width',
+        prefix + 'stroke-opacity',
+        prefix + 'stroke-linejoin',
+        prefix + 'stroke-linecap',
+        prefix + 'stroke-dasharray',
+        prefix + 'stroke-dashoffset'
     ]) && {
         Stroke: [
             {
                 $_am: [
-                    ...getCSSParam(params, 'stroke'),
-                    ...getCSSParam(params, 'stroke-width'),
-                    ...getCSSParam(params, 'stroke-opacity'),
-                    ...getCSSParam(params, 'stroke-linejoin'),
-                    ...getCSSParam(params, 'stroke-linecap'),
-                    ...getCSSParam(params, 'stroke-dasharray'),
-                    ...getCSSParam(params, 'stroke-dashoffset')
+                    ...getCSSParam(params, 'stroke', prefix),
+                    ...getCSSParam(params, 'stroke-width', prefix),
+                    ...getCSSParam(params, 'stroke-opacity', prefix),
+                    ...getCSSParam(params, 'stroke-linejoin', prefix),
+                    ...getCSSParam(params, 'stroke-linecap', prefix),
+                    ...getCSSParam(params, 'stroke-dasharray', prefix),
+                    ...getCSSParam(params, 'stroke-dashoffset', prefix)
                 ]
             }
         ]
@@ -143,29 +171,28 @@ const styleFunctions = {
             }
         ]
     } || {},
-    Mark: (params = {}) => hasParams(params, [
-        'wellknownname',
-        'size',
-        'fill',
-        'fill-opacity',
-        'stroke',
-        'stroke-width',
-        'stroke-opacity',
-        'stroke-linejoin',
-        'stroke-linecap',
-        'stroke-dasharray',
-        'stroke-dashoffset'
-    ]) && ({
+    Mark: (params = {}, prefix = '', wrapper = data => data) => hasParams(params, [
+        prefix + 'wellknownname',
+        prefix + 'size',
+        prefix + 'fill',
+        prefix + 'fill-opacity',
+        prefix + 'stroke',
+        prefix + 'stroke-width',
+        prefix + 'stroke-opacity',
+        prefix + 'stroke-linejoin',
+        prefix + 'stroke-linecap',
+        prefix + 'stroke-dasharray'
+    ]) && (wrapper({
         Graphic: {
             Mark: {
-                ...(params.wellknownname ? {WellKnownName: [params.wellknownname]} : {}),
-                ...styleFunctions.fill(params),
-                ...styleFunctions.stroke(params)
+                ...(params[prefix + 'wellknownname'] ? {WellKnownName: [params[prefix + 'wellknownname']]} : {}),
+                ...styleFunctions.fill(params, prefix),
+                ...styleFunctions.stroke(params, prefix)
             },
-            ...(params.size ? {Size: [params.size]} : {}),
-            ...(params.rotation ? {Rotation: [params.rotation]} : {}),
+            ...(params[prefix + 'size'] ? {Size: [buildValue(params[prefix + 'size'])]} : {}),
+            ...(params[prefix + 'rotation'] ? {Rotation: [buildValue(params[prefix + 'rotation'])]} : {}),
         }
-    }) || {},
+    })) || {},
     PointSymbolizer: (params) => hasParams(params, [
         'wellknownname',
         'url',
@@ -196,12 +223,36 @@ const styleFunctions = {
         'stroke-linejoin',
         'stroke-linecap',
         'stroke-dasharray',
-        'stroke-dashoffset'
+        'stroke-dashoffset',
+        'mark-wellknownname',
+        'mark-size',
+        'mark-fill',
+        'mark-fill-opacity',
+        'mark-stroke',
+        'mark-stroke-width',
+        'mark-stroke-opacity',
+        'mark-stroke-linejoin',
+        'mark-stroke-linecap',
+        'mark-stroke-dasharray',
+        'mark-stroke-dashoffset',
+        'pattern-wellknownname',
+        'pattern-size',
+        'pattern-fill',
+        'pattern-fill-opacity',
+        'pattern-stroke',
+        'pattern-stroke-width',
+        'pattern-stroke-opacity',
+        'pattern-stroke-linejoin',
+        'pattern-stroke-linecap',
+        'pattern-stroke-dasharray'
+
     ]) && {
         PolygonSymbolizer: [
             {
                 ...styleFunctions.fill(params),
-                ...styleFunctions.stroke(params)
+                ...styleFunctions.stroke(params),
+                ...styleFunctions.Mark(params, 'mark-', data => ({ Stroke: { GraphicStroke: data }})),
+                ...styleFunctions.Mark(params, 'pattern-', data => ({ Fill: { GraphicFill: data }}))
             }
         ]
     } || {},
@@ -213,12 +264,23 @@ const styleFunctions = {
         'stroke-linecap',
         'stroke-dasharray',
         'stroke-dashoffset',
-        'perpendicular-offset'
+        'perpendicular-offset',
+        'mark-wellknownname',
+        'mark-size',
+        'mark-fill',
+        'mark-fill-opacity',
+        'mark-stroke',
+        'mark-stroke-width',
+        'mark-stroke-opacity',
+        'mark-stroke-linejoin',
+        'mark-stroke-linecap',
+        'mark-stroke-dasharray'
     ]) && {
         LineSymbolizer: [
             {
                 ...styleFunctions.stroke(params),
-                ...styleFunctions.perpendicularOffset(params)
+                ...styleFunctions.perpendicularOffset(params),
+                ...styleFunctions.Mark(params, 'mark-', data => ({ Stroke: { GraphicStroke: data }}))
             }
         ]
     } || {},
@@ -266,7 +328,17 @@ const styleFunctions = {
 
 const Fill = [
     'fill',
-    'fill-opacity'
+    'fill-opacity',
+    'pattern-wellknownname',
+    'pattern-size',
+    'pattern-fill',
+    'pattern-fill-opacity',
+    'pattern-stroke',
+    'pattern-stroke-width',
+    'pattern-stroke-opacity',
+    'pattern-stroke-linejoin',
+    'pattern-stroke-linecap',
+    'pattern-stroke-dasharray'
 ];
 
 const Stroke = [
@@ -276,7 +348,17 @@ const Stroke = [
     'stroke-linejoin',
     'stroke-linecap',
     'stroke-dasharray',
-    'stroke-dashoffset'
+    'stroke-dashoffset',
+    'mark-wellknownname',
+    'mark-size',
+    'mark-fill',
+    'mark-fill-opacity',
+    'mark-stroke',
+    'mark-stroke-width',
+    'mark-stroke-opacity',
+    'mark-stroke-linejoin',
+    'mark-stroke-linecap',
+    'mark-stroke-dasharray'
 ];
 
 const PointSymbolizer = [
@@ -327,7 +409,8 @@ const types = {
     'fill': {
         format: 'color',
         path: '',
-        transformation: true
+        transformation: true,
+        active: params => isNil(params['pattern-wellknownname'])
     },
     'fill-opacity': {
         format: 'number',
@@ -335,11 +418,13 @@ const types = {
             min: 0,
             max: 1
         },
-        transformation: true
+        transformation: true,
+        active: params => isNil(params['pattern-wellknownname'])
     },
     'stroke': {
         format: 'color',
-        transformation: true
+        transformation: true,
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-width': {
         format: 'number',
@@ -347,7 +432,14 @@ const types = {
             min: 0,
             max: 20
         },
-        transformation: true
+        transformation: true,
+        options: [
+            'px',
+            'm',
+            'ft'
+        ],
+        base: 'px',
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-opacity': {
         format: 'number',
@@ -355,7 +447,8 @@ const types = {
             min: 0,
             max: 1
         },
-        transformation: true
+        transformation: true,
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-linejoin': {
         format: 'select',
@@ -364,7 +457,8 @@ const types = {
             'mitre',
             'round',
             'bevel'
-        ]
+        ],
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-linecap': {
         format: 'select',
@@ -373,21 +467,25 @@ const types = {
             'butt',
             'round',
             'square'
-        ]
+        ],
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-dasharray': {
         format: 'text',
-        transformation: true
+        transformation: true,
+        active: params => isNil(params['mark-wellknownname'])
     },
     'stroke-dashoffset': {
-        format: 'text'
+        format: 'text',
+        active: params => isNil(params['mark-wellknownname']) && !isNil(params['stroke-dasharray'])
     },
     'perpendicular-offset': {
         format: 'number',
         range: {
-            min: 0,
-            max: 50
-        }
+            min: -100,
+            max: 100
+        },
+        active: params => isNil(params['mark-wellknownname'])
     },
     'wellknownname': {
         format: 'text'
@@ -446,6 +544,142 @@ const types = {
     },
     'sort-by-group': {
         format: 'text'
+    },
+    'mark-wellknownname': {
+        format: 'text',
+        active: params => isNil(params.stroke)
+    },
+    'mark-size': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 50
+        },
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-fill': {
+        format: 'color',
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-fill-opacity': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 1
+        },
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke': {
+        format: 'color',
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke-width': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 50
+        },
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke-opacity': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 1
+        },
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke-linejoin': {
+        format: 'select',
+        base: 'mitre',
+        options: [
+            'mitre',
+            'round',
+            'bevel'
+        ],
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke-linecap': {
+        format: 'select',
+        base: 'butt',
+        options: [
+            'butt',
+            'round',
+            'square'
+        ],
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'mark-stroke-dasharray': {
+        format: 'text',
+        active: params => !isNil(params['mark-wellknownname'])
+    },
+    'pattern-wellknownname': {
+        format: 'text',
+        active: params => isNil(params.fill)
+    },
+    'pattern-size': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 50
+        },
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-fill': {
+        format: 'color',
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-fill-opacity': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 1
+        },
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke': {
+        format: 'color',
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke-width': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 50
+        },
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke-opacity': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: 1
+        },
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke-linejoin': {
+        format: 'select',
+        base: 'mitre',
+        options: [
+            'mitre',
+            'round',
+            'bevel'
+        ],
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke-linecap': {
+        format: 'select',
+        base: 'butt',
+        options: [
+            'butt',
+            'round',
+            'square'
+        ],
+        active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'pattern-stroke-dasharray': {
+        format: 'text',
+        active: params => !isNil(params['pattern-wellknownname'])
     }
 };
 
@@ -554,7 +788,7 @@ const parser = {
         const type = func && func.$ && func.$.name && func.$.name.toLowerCase();
         const sldFunction = head(parser.fromKey('Function', func) || []);
         const name =  head(parser.fromKey('PropertyName', func) || []) || parser.extractFunction(sldFunction);
-        const firstValue = type === 'categorize' && isArray(sldLiterals) && [{value: sldLiterals[0]}] || [];
+        const firstValue = type === 'categorize' && isArray(sldLiterals) && [{value: parseValue(sldLiterals[0])}] || [];
         
         const literals = isArray(sldLiterals) && (
             type === 'recode' && [...sldLiterals]
@@ -566,8 +800,8 @@ const parser = {
             return idx % 2 === 0 ? [
                 ...newList,
                 {
-                    value: literals[idx + 1],
-                    literal: literals[idx]
+                    literal: literals[idx],
+                    value: parseValue(literals[idx + 1])
                 }
             ] : [...newList]
         }, []);
@@ -581,7 +815,7 @@ const parser = {
             list: [...finalList].reverse()
         } || '';
     },
-    extractCSS: (key, rule) => {
+    extractCSS: (key, rule, prefix = '') => {
         const sldKey = parser.fromKey(key, rule);
         const cssParameters = isArray(sldKey) && sldKey[0] && parser.fromKey('CssParameter', sldKey[0]);
         return cssParameters && cssParameters.reduce((newParams, css) => {
@@ -590,7 +824,7 @@ const parser = {
             const func = head(parser.fromKey('Function', css) || []);
             return !isNil(name) && (!isNil(value) || !isNil(func)) && {
                 ...newParams,
-                [name]: func && parser.extractTransformation(func) || value
+                [prefix + name]: func && parser.extractTransformation(func) || parseValue(value)
             };
         }, {}) || {};
     },
@@ -706,22 +940,30 @@ const parser = {
     PerpendicularOffset: rule => {
         const perpendicularOffset = head(parser.fromKey('PerpendicularOffset', rule) || []);
         return perpendicularOffset && {
-            'perpendicular-offset': perpendicularOffset
+            'perpendicular-offset': parseValue(perpendicularOffset)
         } || {};
     },
-    Mark: rule => {
+    
+    Mark: (rule, prefix = '') => {
         const Graphic = head(parser.fromKey('Graphic', rule) || []);
         const Mark = head(parser.fromKey('Mark', Graphic) || []);
         const wellknownname = head(parser.fromKey('WellKnownName', Mark) || []);
         const size = head(parser.fromKey('Size', Graphic) || []);
         const rotation =  head(parser.fromKey('Rotation', Graphic) || []);
         return {
-            ...(wellknownname ? {wellknownname} : {}),
-            ...parser.extractCSS('Fill', Mark),
-            ...parser.extractCSS('Stroke', Mark),
-            ...(size ? {size} : {}),
-            ...(rotation ? {rotation} : {})
+            ...(wellknownname ? {[prefix + 'wellknownname']: wellknownname} : {}),
+            ...parser.extractCSS('Fill', Mark, prefix),
+            ...parser.extractCSS('Stroke', Mark, prefix),
+            ...(size ? {[prefix + 'size']: parseValue(size)} : {}),
+            ...(rotation ? {[prefix + 'rotation']: parseValue(rotation)} : {})
         }; 
+    },
+    Graphic: (type, rule, prefix = '') => {
+        const ruleType = rule && head(parser.fromKey(type, rule) || []);
+        const graphicType = ruleType && head(parser.fromKey('Graphic' + type, ruleType) || []);
+        return graphicType && {
+            ...parser.Mark(graphicType, prefix)
+        };
     },
     PointSymbolizer: rule => ({
         _id: uuidv1(),
@@ -730,18 +972,27 @@ const parser = {
         ...parser.extractCSS('Stroke', rule),
         ...parser.Mark(rule)
     }),
-    LineSymbolizer: rule => ({
-        _id: uuidv1(),
-        _: 'LineSymbolizer',
-        ...parser.extractCSS('Stroke', rule),
-        ...parser.PerpendicularOffset(rule)
-    }),
-    PolygonSymbolizer: rule => ({
-        _id: uuidv1(),
-        _: 'PolygonSymbolizer',
-        ...parser.extractCSS('Fill', rule),
-        ...parser.extractCSS('Stroke', rule)
-    }),
+    LineSymbolizer: rule => {
+        const graphicStroke = parser.Graphic('Stroke', rule, 'mark-');
+        return {
+            _id: uuidv1(),
+            _: 'LineSymbolizer',
+            ...(graphicStroke ? graphicStroke : {
+                ...parser.extractCSS('Stroke', rule),
+                ...parser.PerpendicularOffset(rule)
+            })
+        };
+    },
+    PolygonSymbolizer: rule => {
+        const graphicFill = parser.Graphic('Fill', rule, 'pattern-');
+        const graphicStroke = parser.Graphic('Stroke', rule, 'mark-');
+        return {
+            _id: uuidv1(),
+            _: 'PolygonSymbolizer',
+            ...(graphicFill ? graphicFill : parser.extractCSS('Fill', rule)),
+            ...(graphicStroke ? graphicStroke : parser.extractCSS('Stroke', rule))
+        };
+    },
     TextSymbolizer: rule => ({
         _id: uuidv1(),
         _: 'TextSymbolizer',
@@ -757,7 +1008,7 @@ const parseVendorOptions = (options = [], translate = {}) => {
         const value = option && option._;
         return {
             ...newOptions,
-            ...(!isNil(name) && !isNil(value) ? {[translate[name] || name]: value} : {})
+            ...(!isNil(name) && !isNil(value) ? {[translate[name] || name]: parseValue(value)} : {})
         };
     }, {});
 };

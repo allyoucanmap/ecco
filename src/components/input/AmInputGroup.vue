@@ -122,7 +122,7 @@
         },
         methods: {
             $am_isObject(value) {
-                return isObject(value);
+                return value && !value.number && !value.unit && isObject(value);
             }
         }
     };

@@ -5,25 +5,15 @@
 const express = require("express");
 const path = require('path');
 const app = express();
-const proxy = require('express-http-proxy');
+// const proxy = require('express-http-proxy');
 
 const application = (port = 3000, before = () => {}) => {
 
     before(app);
 
-    app.use(function (req, res, next) {
-        res.header("Access-Control-Allow-Origin", "*");
-        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-        if ('OPTIONS' === req.method && req.url && req.url.indexOf('geoserver') !== -1) {
-            res.send(200);
-        } else {
-            next();
-        }
-    });
-
     app.use(express.static('./'));
 
-    app.use('/', proxy('http://localhost:8080/geoserver'));
+    // app.use('/', proxy('http://localhost:8080/geoserver'));
 
     app.use(`http://localhost:${port}/`, function (req, res) {
         res.sendFile(path.resolve('./index.html'));

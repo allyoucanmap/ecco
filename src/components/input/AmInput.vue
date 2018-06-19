@@ -23,6 +23,8 @@
             :value="value"
             :range="range"
             :compact="compact"
+            :options="options"
+            :default-option="defaultOption"
             :on-change="number => onChange(number)"/>
         <am-text
             v-if="format === 'text'"
@@ -58,7 +60,7 @@
         },
         props: {
             value: {
-                type: [String, Number],
+                type: [String, Number, Object],
                 default: ''
             },
             format: {

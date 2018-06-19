@@ -119,12 +119,16 @@
                                 const oldLayer = head(this.oldLayers.filter(layer => layer.name === ent.id));
                                 if (layer && oldLayer && layer.sld !== oldLayer.sld
                                 || this.oldSLD !== this.currentSLD && this.selectedLayer && ent.id === this.selectedLayer.name) {
+                                    this.onLoading(true);
                                    updateEntityTexture(ent,  this.$am_getLayerUrl({
                                         layer: layer,
                                         bbox: this.bbox,
                                         width: this.width,
                                         height: this.height
-                                    }));
+                                    }),
+                                    () => {
+                                        this.onLoading(false);
+                                    });
                                 }
                             }
                         });
@@ -134,15 +138,19 @@
                         || this.oldZoom !== this.zoom
                         || !isEqual(this.pseudo, this.oldPseudo)
                         || oldOrder !== order) {
-                            this.entities.forEach(ent => {
-                                destroyEntity(ent);
-                            });
-                            this.entities =  this.$am_getEntities({
+                            
+                            const entities =  this.$am_getEntities({
                                 layers,
                                 entity,
                                 bbox: this.bbox,
                                 width: this.width,
-                                height: this.height
+                                height: this.height,
+                                callback: () => {
+                                    this.entities.forEach(ent => {
+                                        destroyEntity(ent);
+                                    });
+                                    this.entities = entities;
+                                }
                             });
                             
                         }
@@ -162,18 +170,20 @@
                             zoom: this.zoom
                         });
 
-                        this.entities.forEach(ent => {
-                            destroyEntity(ent);
-                        });
-
                         const layers = this.$am_getLayers();
 
-                        this.entities =  this.$am_getEntities({
+                        const entities =  this.$am_getEntities({
                             layers,
                             entity,
                             bbox: this.bbox,
                             width: this.width,
-                            height: this.height
+                            height: this.height,
+                            callback: () => {
+                                this.entities.forEach(ent => {
+                                    destroyEntity(ent);
+                                });
+                                this.entities = entities;
+                            }
                         });
                     }
                 }
@@ -183,7 +193,8 @@
             ...mapActions({
                 setSize: 'app/setMapSize',
                 setCenter: 'app/setMapCenter',
-                getInfo: 'app/getInfo'
+                getInfo: 'app/getInfo',
+                onLoading: 'app/loading'
             }),
             $am_getLayerUrl({layer, bbox, width, height}) {
                 const params = {
@@ -226,12 +237,11 @@
                     this.getInfo({
                         params: {
                             bbox: join(bbox, ','),
-                            request: 'GetFeatureInfo',
                             query_layers: join(layersNames, ','),
                             layers: join(layersNames, ','),
                             width,
                             height,
-                            crs: 'EPSG:3857',
+                            crs: 'EPSG:900913',
                             x: width / 2,
                             y: height / 2,
                             // info_format: 'application/json',
@@ -244,12 +254,19 @@
                 const layers = this.layers.reduce((mergedLayers, layer) => ({...mergedLayers, [layer.name]: {...layer}}), {});
                 return Object.keys(layers).map(name => ({...layers[name]}));
             },
-            $am_getEntities({layers, entity, bbox, width, height}) {
+            $am_getEntities({layers, entity, bbox, width, height, callback = () => {}}) {
+                if (layers.length > 0) this.onLoading(true);
                 return layers.map((layer, z) => {
                     return entity({
                         id: layer.name,
                         color: '#333333',
                         textureUrl: this.$am_getLayerUrl({layer, bbox, width, height}),
+                        textureCallback: () => {
+                            if (z === layers.length - 1) {
+                                this.onLoading(false);
+                                callback();
+                            }
+                        },
                         position: [0, 0, z],
                         feature: {
                             type: 'Polygon',

@@ -63,6 +63,9 @@
         padding: 0;
         border-bottom: none; 
     }
+    .am-group .am-item.am-selected {
+        background-color: #115555;
+    }
 </style>
 
 <template lang="html">
@@ -74,9 +77,9 @@
         @dragenter="$_am_dragenter"
         @drop="$_am_drop">
         <div
-            v-for="(item, itemId) in items"
+            v-for="item in items"
             :class="`am-item-container ${!item.panel && item.type === 'group' && item.collapsed ? 'am-collapsed' : ''} ${(oldID === item.id || item.collapsed === true && item.type !== 'group') ? 'am-hide' : ''} ${!item.panel && item.type === 'group' ? 'am-group' : ''}`"
-            :key="itemId"
+            :key="item.id"
             :data-id="item.id"
             :data-list-id="listID"
             :draggable="!item.expanded && items.length > 1"
@@ -122,7 +125,7 @@
                     :on-expand="value => $am_onExpandPanel(item.id, value)">
                     <am-input-group
                         v-for="(param, valueId) in item.params"
-                        :key="valueId"
+                        :key="param.label"
                         :value="param.value"
                         :default-option="param.option"
                         :label="param.label"
@@ -180,28 +183,31 @@
             $_am_dragover(event) {
                 const children = [...this.$el.children];
                 const child = head(children.filter(child => child.contains(event.target)));
-                const hoverID  = child.getAttribute('data-id');
+                const currentListID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-list-id')));
+                if (this.oldListID === currentListID) {
+                    const hoverID  = child.getAttribute('data-id');
 
-                const containerRect = this.$el.getBoundingClientRect();
-                const targetRect = child.getBoundingClientRect();
-                const mouseY = event.clientY - containerRect.top;
-                const targetY = targetRect.top - containerRect.top;
-                const items = [...this.$el.getElementsByClassName('am-item-container')];
+                    const containerRect = this.$el.getBoundingClientRect();
+                    const targetRect = child.getBoundingClientRect();
+                    const mouseY = event.clientY - containerRect.top;
+                    const targetY = targetRect.top - containerRect.top;
+                    const items = [...this.$el.getElementsByClassName('am-item-container')];
 
-                items.forEach(item => {
-                    item.style.paddingBottom = 0;
-                    item.style.paddingTop = 0;
-                    item.style.backgroundColor = 'transparent';
-                    item.style.color = '#333333';
-                });
+                    items.forEach(item => {
+                        item.style.paddingBottom = 0;
+                        item.style.paddingTop = 0;
+                        item.style.backgroundColor = 'transparent';
+                        item.style.color = '#333333';
+                    });
 
-                if (hoverID) {
-                    if (mouseY >= targetY + targetRect.height / 2) {
-                        child.style.paddingBottom = 27 + 'px';
-                        this.position = 'DOWN';
-                    } else if (mouseY < targetY + (targetRect.height / 2)) {
-                        child.style.paddingTop = 27 + 'px';
-                        this.position = 'UP';
+                    if (hoverID) {
+                        if (mouseY >= targetY + targetRect.height / 2) {
+                            child.style.paddingBottom = 27 + 'px';
+                            this.position = 'DOWN';
+                        } else if (mouseY < targetY + (targetRect.height / 2)) {
+                            child.style.paddingTop = 27 + 'px';
+                            this.position = 'UP';
+                        }
                     }
                 }
                 event.preventDefault();

@@ -22,7 +22,14 @@ export default {
             height: 0
         },
         center: [139.753372, 35.685360],
-        info: {}
+        info: {},
+        loading: false,
+        settings: {
+            username: 'admin',
+            password: 'geoserver',
+            source: 'http://localhost:8080/geoserver'
+        },
+        capabilities: {}
     },
     mutations: {
         [actions.ADD_LAYER](state, payload) {
@@ -89,6 +96,17 @@ export default {
             }).filter(feature => !isEmpty(feature)).map((feature, id) => ({id: 'feature:' + id, properties: feature}));
 
             state.info = {features};
+        },
+        [actions.LOADING](state, payload) {
+            state.loading = payload.load;
+        },
+        [actions.UPDATE_SETTINGS](state, payload) {
+            const settings = {...state.settings, ...payload.settings};
+            localStorage.setItem('ecco~settings', JSON.stringify(settings));
+            state.settings = settings;
+        },
+        [actions.GET_CAPABILITIES](state, payload) {
+            state.capabilities = payload.capabilities;
         }
     }
 };

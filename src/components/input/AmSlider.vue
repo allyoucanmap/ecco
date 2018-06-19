@@ -9,6 +9,21 @@
     .am-slider-container .am-slider {
         margin-top: 6px;
     }
+    .am-slider-container .am-slider-input {
+        display: flex;
+    }
+    .am-slider-container .am-slider-input input {
+        flex: 1;
+    }
+    .am-slider-container .am-slider-input button {
+        height: 24px;
+        width: 24px;
+        border-left: none;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .am-slider-container.am-compact .am-slider {
         margin-top: 0;
     }
@@ -26,9 +41,16 @@
 
 <template lang="html">
     <div :class="`am-slider-container ${compact && 'am-compact'}`">
-        <input
-            :value="number"
-            @change="event => $am_Change(event.target.value)">
+        <div class="am-slider-input">
+            <input
+                :value="number"
+                @change="event => $am_Change(event.target.value, unit)">
+            <button
+                v-if="options && defaultOption"
+                @click="() => $am_onToggle()">
+                {{ unit }}
+            </button>
+        </div>
         <div
             id="am-slider"
             class="am-slider"/>
@@ -38,12 +60,12 @@
 <script>
 
     import slider from 'nouislider';
-    import {isNil} from 'lodash';
+    import {isNil, isObject, isEqual} from 'lodash';
 
     export default {
         props: {
             value: {
-                type: [Number, String],
+                type: [Number, String, Object],
                 default: 0
             },
             onChange: {
@@ -57,29 +79,44 @@
             compact: {
                 type: Boolean,
                 default: false
+            },
+            options: {
+                type: Array,
+                default: () => null
+            },
+            defaultOption: {
+                type: String,
+                default: ''
             }
         },
         data(){
             return {
                 number: 0,
+                unit: '',
                 slider: null
             }
         },
         watch: {
             value(newValue, oldValue) {
-                if (newValue !== oldValue) {
-                    if (!isNil(newValue)) {
-                        this.number = newValue;
+                if (!isEqual(newValue, oldValue)) {
+                    if (this.options && isObject(newValue)) {
+                        this.number = !isNil(newValue.number) && newValue.number || 0; 
+                        this.unit = !isNil(newValue.unit) && newValue.unit || this.defaultOption;
                     } else {
-                        this.number = 0;
+                        this.number = !isNil(newValue) && newValue || 0;
+                        this.unit = this.defaultOption;
                     }
                     this.slider.set([this.number]);
                 }
             }
         },
         created() {
-            if (!isNil(this.value)) {
-                this.number = this.value;
+            if (this.options && isObject(this.value)) {
+                this.number = !isNil(this.value.number) && this.value.number || 0; 
+                this.unit = !isNil(this.value.unit) && this.value.unit || this.defaultOption;
+            } else {
+                this.number = !isNil(this.value) && this.value || 0;
+                this.unit = this.defaultOption;
             }
         },
         mounted() {
@@ -92,7 +129,14 @@
                 this.slider.on('change', (value) => {
                     const number = value && parseFloat(value[0]) || 0;
                     this.number = number;
-                    this.onChange(number);
+                    if (this.options) {
+                        this.onChange({
+                            number,
+                            unit: this.unit
+                        });
+                    } else {
+                        this.onChange(number);
+                    }
                 });
             }
         },
@@ -105,7 +149,22 @@
             $am_Change(number) {
                 this.number = number;
                 this.slider.set([number]);
-                this.onChange(number);
+                if (this.options) {
+                    this.onChange({
+                        number,
+                        unit: this.unit
+                    });
+                } else {
+                    this.onChange(number);
+                }
+            },
+            $am_onToggle() {
+                const index = this.options.indexOf(this.unit);
+                this.unit = index + 1 > this.options.length - 1 ? this.options[0] : this.options[index + 1];
+                this.onChange({
+                    number: this.number,
+                    unit: this.unit
+                });
             }
         }
     };
