@@ -17,10 +17,10 @@
         margin-bottom: 8px;
     }
     .am-label-text {
-        font-family: EBGaramond12-Regular;
+        font-family: EBGaramond12-Regular, 'EB Garamond';
     }
     .am-label-text * {
-        font-family: EBGaramond12-Regular;
+        font-family: EBGaramond12-Regular, 'EB Garamond';
     }
     .am-btn {
         opacity: 0.5;

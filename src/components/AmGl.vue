@@ -205,7 +205,7 @@
                     LAYERS: layer.name,
                     SRS: 'EPSG:900913',
                     TRANSPARENT: 'true',
-                    STYLES: this.projectName + layer.name + '~ecco~style',
+                    STYLES: this.projectName + layer.name.replace(/\:/g, '_') + '~ecco~style',
                     WIDTH: width,
                     HEIGHT: height,
                     BBOX: join(bbox, ','),
