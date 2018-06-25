@@ -87,6 +87,10 @@
             defaultOption: {
                 type: String,
                 default: ''
+            },
+            step: {
+                type: Number,
+                default: 0
             }
         },
         data(){
@@ -124,7 +128,8 @@
             if (div && !this.disabled) {
                 this.slider = slider.create(div, {
                     start: [this.number],
-                    range: this.range
+                    range: this.range,
+                    step: this.step
                 });
                 this.slider.on('change', (value) => {
                     const number = value && parseFloat(value[0]) || 0;

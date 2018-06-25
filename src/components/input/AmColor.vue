@@ -34,7 +34,8 @@
 <template lang="html">
     <div class="am-color">
         <input
-            v-model="color"
+            :value="color"
+            @change="event => $am_onChange(event.target.value)"
             :style="`color: ${colorText}; background-color: ${color};`">
         <button
             :class="`am-icon ${enable ? 'am-active' : ''}`"
@@ -55,7 +56,7 @@
 <script>
     import { Chrome } from 'vue-color';
     import tinycolor from 'tinycolor2';
-    import {isNil} from 'lodash';
+    import {isString, isNil} from 'lodash';
 
     export default {
         components: {
@@ -120,8 +121,9 @@
                     this.enable = !this.enable;
                 }
             },
-            $am_onChange({hex}) {
-                this.colors = { hex };
+            $am_onChange(color) {
+                const hex = !isString(color) && color.hex || color;
+                this.colors = {hex};
                 this.color = hex;
                 this.colorText = tinycolor.mostReadable(hex, '#000000', {includeFallbackColors: true});
             }

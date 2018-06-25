@@ -17,10 +17,10 @@
         margin-bottom: 8px;
     }
     .am-label-text {
-        font-family: EBGaramond12-Regular;
+        font-family: EBGaramond12-Regular, 'EB Garamond';
     }
     .am-label-text * {
-        font-family: EBGaramond12-Regular;
+        font-family: EBGaramond12-Regular, 'EB Garamond';
     }
     .am-btn {
         opacity: 0.5;
@@ -51,6 +51,7 @@
             :format="type.format"
             :options="type.options"
             :range="type.range"
+            :step="type.step"
             :default-option="defaultOption"
             :on-change="val => onChange(val)"
             :on-toggle="type.transformation ? () => onChange({}) : null"/>
@@ -60,6 +61,7 @@
             :format="type.format"
             :options="type.options"
             :range="type.range"
+            :step="type.step"
             :default-option="defaultOption"
             :on-change="val => onChange(val)"
             :on-toggle="type.transformation ? () => onChange('') : null"/>

@@ -22,6 +22,7 @@
             v-if="format === 'number'"
             :value="value"
             :range="range"
+            :step="step"
             :compact="compact"
             :options="options"
             :default-option="defaultOption"
@@ -96,6 +97,10 @@
             compact: {
                 type: Boolean,
                 default: false
+            },
+            step: {
+                type: Number,
+                default: 0
             }
         }
     };

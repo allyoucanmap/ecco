@@ -83,18 +83,20 @@
         },
         watch: {
             keys(keys) {
-                if (keys.ArrowRight) {
-                    this.$am_onMove(1, 0);
-                    this.$am_onSelect('right');
-                } else if (keys.ArrowLeft) {
-                    this.$am_onMove(-1, 0);
-                    this.$am_onSelect('left');
-                } else if (keys.ArrowUp) {
-                    this.$am_onMove(0, 1);
-                    this.$am_onSelect('up');
-                } else if (keys.ArrowDown) {
-                    this.$am_onMove(0, -1);
-                    this.$am_onSelect('down');
+                if (keys.Control) {
+                    if (keys.ArrowRight) {
+                        this.$am_onMove(1, 0);
+                        this.$am_onSelect('right');
+                    } else if (keys.ArrowLeft) {
+                        this.$am_onMove(-1, 0);
+                        this.$am_onSelect('left');
+                    } else if (keys.ArrowUp) {
+                        this.$am_onMove(0, 1);
+                        this.$am_onSelect('up');
+                    } else if (keys.ArrowDown) {
+                        this.$am_onMove(0, -1);
+                        this.$am_onSelect('down');
+                    }
                 }
             }
         },

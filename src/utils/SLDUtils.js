@@ -5,6 +5,8 @@ import xml2js from 'xml2js';
 import {scales} from './PrjUtils';
 import uuidv1 from 'uuid/v1';
 
+const MAX_ZINDEX = 20;
+
 const xmlParser = new xml2js.Parser();
 const xmlBuilder = new xml2js.Builder({
     xmldec: {
@@ -368,17 +370,20 @@ const PointSymbolizer = [
     'size',
     'rotation',
     ...Fill,
-    ...Stroke
+    ...Stroke,
+    'z-index'
 ];
 
 const LineSymbolizer = [
     ...Stroke,
-    'perpendicular-offset'
+    'perpendicular-offset',
+    'z-index'
 ];
 
 const PolygonSymbolizer = [
     ...Fill,
-    ...Stroke
+    ...Stroke,
+    'z-index'
 ];
 
 const TextSymbolizer = [
@@ -387,7 +392,8 @@ const TextSymbolizer = [
     'font-style',
     'font-weight',
     'font-size',
-    ...Fill
+    ...Fill,
+    'z-index'
 ];
 
 const FeatureTypeStyle = [
@@ -680,6 +686,15 @@ const types = {
     'pattern-stroke-dasharray': {
         format: 'text',
         active: params => !isNil(params['pattern-wellknownname'])
+    },
+    'z-index': {
+        format: 'number',
+        range: {
+            min: 0,
+            max: MAX_ZINDEX
+        },
+        step: 1,
+        active: (params, layer) => layer && layer.groupId
     }
 };
 
@@ -1087,18 +1102,102 @@ const parseStyle = (sld, style = () => {}) => {
                 ];
             }, []);
 
-            style({rules});
+            
+            const zIndexRule = rules.map(rule => {
+                if (rule.type === 'layer') {
+                    const layerGroup = head(rules.filter(gr => gr.id === rule.groupId && gr.label && gr.label.match(/\$\{([\d]+)\}/)));
+                    if (layerGroup) {
+                        const index = layerGroup.label.match(/\$\{([\d]+)\}/);
+                        return {
+                            ...rule,
+                            rule: rule.rule && rule.rule.map(rl => ({...rl, 'z-index': index[1]})) || []
+                        };
+                    }
+                    return null;
+                }
+                return null;
+            }).filter(val => !isNil(val));
+
+
+            const otherRules = rules.filter(rule =>
+                !(rule.type === 'group' && rule.label && rule.label.match(/\$\{([\d]+)\}/)
+                || rule.type === 'layer' && head(rules.filter(gr => gr.id === rule.groupId && gr.label && gr.label.match(/\$\{([\d]+)\}/)))) 
+            );
+
+            style({
+                rules: otherRules.map(rule => {
+                    const name = rule.general && head(rule.general.filter(rl => rl.name === 'Name').map(rl => rl.value)) || '';
+                    const zIndexRl = zIndexRule.filter(rl => {
+                        const zIndexName = rl.general && head(rl.general.filter(r => r.name === 'Name').map(r => r.value));
+                        return zIndexName && zIndexName === name;
+                    }).reduce((newRl, rl) => {
+                        return [...newRl, ...rl.rule]
+                    }, []);
+                    if (zIndexRl) {
+                        return {
+                            ...rule, 
+                            rule: [...rule.rule, ...zIndexRl]
+                        }
+                    }
+                    return rule;
+                })
+            });
         }
     });
 };
 
 const getSLD = (items, name, id, currentFilter) => {
-    const groups = items.filter(item => item.type === 'group');
-    
-    const layers = items.filter(item => item.type === 'layer').reduce((objLayers, layer) => {
+    let groups = items.filter(item => item.type === 'group').map((group, idx) => ({...group, zIndex: idx * MAX_ZINDEX}));
+
+    const splitLayersByZ = items.filter(item => item.type === 'layer').reduce((objLayers, layer) => {
+        const {general, filters, rule, scales} = id === layer.id && currentFilter && currentFilter || layer;
+        const newRules = rule.reduce((ruleObj, rl) => {
+            const zIndex = !isNaN(rl['z-index'] && rl['z-index'].number) && rl['z-index'].number || !isNaN(rl['z-index']) && rl['z-index'] || 0;
+            return {
+                ...ruleObj,
+                [zIndex]: [...(ruleObj[zIndex] || []), {...rl}]
+            };
+        }, {});
+        const order = Object.keys(newRules).map(z => parseFloat(z));
+        groups = groups.reduce((newGroups, group) => { 
+            if (group.id !== layer.groupId) {
+                return [...newGroups, {...group}];
+            }
+            return [
+                ...newGroups,
+                {...group},
+                ...order.filter(z => z !== 0 && !head(groups.filter(grp => grp.id === layer.groupId + z)))
+                .map(z => ({
+                    ...group,
+                    id: group.id + z,
+                    zIndex: group.zIndex + z,
+                    label: group.label + '${' + z + '}'
+                }))
+            ];
+        }, []);
+        
+        return [
+            ...objLayers,
+            ...order.map((z) => {
+                return {
+                    ...layer,
+                    general,
+                    filters,
+                    scales,
+                    groupId: z ? layer.groupId + z : layer.groupId,
+                    rule: newRules[z]
+                }
+            })
+        ];
+    }, []);
+
+    groups = [...groups].sort((a, b) => a.zIndex > b.zIndex);
+
+    const layers = splitLayersByZ.reduce((objLayers, layer) => {
+        const prefix = layer.prefix && layer.prefix + '~' || '';
         return {
             ...objLayers,
-            [layer.name]: [...(objLayers[layer.name] || []), {...layer}]
+            [prefix + layer.name]: [...(objLayers[prefix + layer.name] || []), {...layer}]
         };
     }, {});
 
@@ -1127,7 +1226,7 @@ const getSLD = (items, name, id, currentFilter) => {
         const order = ['_', ...groups.map(group => group.id)].filter(id => head(grps.filter(grp => grp + '' === id + '')));
         const featureTypes = order.map(key => {
             const data = styles[layerName][key].map(layer => {
-                const {general, filters, rule, scales} = !isNil(name) && id === layer.id ? currentFilter : layer;
+                const {general, filters, rule, scales} = layer;
                 const sldSymbolizers = rule && rule
                     .map((symbol) => styleFunctions[symbol._] && styleFunctions[symbol._](symbol))
                     .reduce((json, symbol) => {

@@ -5,7 +5,7 @@
         box-sizing: border-box;
         color: #444444;
         outline-color: #91f3f7;
-        font-family: OpenSans-Light;
+        font-family: OpenSans-Light, 'Open Sans';
     }
     button {
         height: 21px;

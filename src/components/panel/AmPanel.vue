@@ -30,7 +30,7 @@
             <button
                 v-if="onRemove"
                 class="am-icon"
-                @click="() => onRemove()">
+                @click="(event) => onRemove(event)">
                 X
             </button>
             <button

@@ -66,6 +66,7 @@
                 :format="format"
                 :options="options"
                 :range="range"
+                :step="step"
                 :default-option="defaultOption"
                 :on-change="val => $am_onChange(idx, 'value', val)"/>
             <button
@@ -121,6 +122,10 @@
             defaultOption: {
                 type: String,
                 default: ''
+            },
+            step: {
+                type: Number,
+                default: 0
             }
         },
         data() {

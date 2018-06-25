@@ -58,7 +58,7 @@
                 v-if="selectedLayer.type === 'layer'"
                 head="General">
                 <am-input-group
-                    v-for="(info, infoId) in general"
+                    v-for="(info, infoId) in general.filter(inf => inf.name !== 'Name')"
                     :key="infoId"
                     :label="info.name"
                     :value="info.value"
@@ -99,7 +99,7 @@
                     _id: symbol._id, 
                     _: symbol._, 
                     params: symbolizers[symbol._]
-                        .filter(param => types[param] && (!types[param].active || types[param].active && types[param].active(symbol)))
+                        .filter(param => types[param] && (!types[param].active || types[param].active && types[param].active(symbol, selectedLayer)))
                         .map(param => ({
                             value: symbol[param],
                             label: param.replace('-', ' '),
@@ -207,7 +207,7 @@
                     this.general = newLayer.general || newLayer.type === 'layer' && [
                         {
                             name: 'Name',
-                            value: newLayer.label
+                            value: newLayer.label || newLayer.id
                         },
                         {
                             name: 'Title',
@@ -292,12 +292,13 @@
             },
             $am_onUpdateSLD(general, filters, rule, scales) {
                 if (this.selectedLayer.type === 'layer') {
-                    const sldObj = getSLD(this.items, this.selectedLayer.name, this.selectedLayer.id, {general, filters, rule, scales});
-                    const sld = sldObj[this.selectedLayer.name];
+                    const prefix = this.selectedLayer.prefix && this.selectedLayer.prefix + '~' || '';
+                    const sldObj = getSLD(this.items, prefix + this.selectedLayer.name, this.selectedLayer.id, {general, filters, rule, scales});
+                    const sld = sldObj[prefix + this.selectedLayer.name];
                     
                     if (sld) {
                         this.$am_updateSLD({
-                            name: this.projectName + this.selectedLayer.name + '~ecco~style',
+                            name: prefix + this.selectedLayer.name + '~ecco',
                             sld,
                             general: [...general],
                             filters: {...filters},

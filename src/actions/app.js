@@ -64,13 +64,13 @@ export default {
             } else {
                 styleAPI.getStyle({
                     options: {
-                        name: (layer.style || layer.name + '~ecco~style') + '.sld'
+                        name: (layer.style || (layer.prefix && layer.prefix + '~' || '') + layer.name + '~ecco') + '.sld'
                     },
                     settings
                 }, sld => {
                     styleAPI.updateStyle({
                         options: {
-                            name: layer.name + '~ecco~style~tmp',
+                            name: (layer.prefix && layer.prefix + '~' || '') + layer.name + '~ecco_tmp',
                             sld
                         },
                         settings
@@ -167,7 +167,10 @@ export default {
             const settings = {...state.settings};
             loading({ commit }, true);
             styleAPI.updateStyle({
-                options,
+                options: {
+                    ...options,
+                    name: (options.prefix && options.prefix + '~' || '') + options.name
+                },
                 settings
             }, () => {
                 updateCurrentSLD({ commit }, {...options});
@@ -184,7 +187,7 @@ export default {
             Object.keys(sldObj).forEach(name => {
                 styleAPI.updateStyle({
                     options: {
-                        name: name + '~ecco~style',
+                        name: name + '~ecco',
                         sld: sldObj[name]
                     },
                     settings

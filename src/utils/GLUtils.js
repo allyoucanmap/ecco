@@ -210,7 +210,7 @@ const bindTexture = ({ gl, img, width, height }) => {
     return texture;
 };
 
-const bindTextureFromUrl = (gl, url, callback = () => { }) => {
+const bindTextureFromUrl = (gl, url, callback = () => { }, error = () => {}) => {
     const img = document.createElement('img');
     img.$_am_texture = gl.createTexture();
 
@@ -240,6 +240,9 @@ const bindTextureFromUrl = (gl, url, callback = () => { }) => {
             gl.bindTexture(gl.TEXTURE_2D, null);
             callback(img);
         }
+    };
+    img.onerror = () => {
+        error();
     };
     img.crossOrigin = 'anonymous';
     img.src = url;

@@ -3,9 +3,11 @@
 <style scoped>
     #am-gl {
         font-family: serif;
+        cursor: pointer;
     }
     canvas {
         font-family: serif;
+        cursor: pointer;
     }
 </style>
 
@@ -14,6 +16,8 @@
         id="am-gl"
         class="am-gl"
         @click="event => $am_getInfo(event)"
+        @mousemove="event => $am_onMove(event)"
+        @mousewheel="event => $am_onScroll(event)"
         @dblclick="event =>$am_setCenter(event)"/>
 </template>
 
@@ -22,6 +26,7 @@
     import {mapGetters, mapActions} from 'vuex';
     import {join, isEqual, head, isArray} from 'lodash';
     import {pseudo, wgs84} from '../utils/PrjUtils';
+    import {mapValue, lerp} from '../utils/Utils';
 
     export default {
         data() {
@@ -34,7 +39,11 @@
                 oldSLD: '',
                 oldLayers: [],
                 oldZoom: 0,
-                oldPseudo: []
+                oldPseudo: [],
+                pixel: [],
+                dragPoint: [],
+                delta: [],
+                pseudo: []
             };
         },
         computed: {
@@ -52,15 +61,27 @@
             })
         },
         watch: {
-            center(center) {
-                this.pseudo = pseudo(center);
+            center(newCenter, oldCenter) {
+                // this.pseudo = pseudo(center);
+                if (!isEqual(newCenter, oldCenter)) {
+                    this.delta = [...pseudo(newCenter)];
+                }
             },
             width(width) {
                 this.setSize({width, height: this.height});
             },
             height(height) {
                 this.setSize({width: this.width, height});
+            },
+            dragPoint(newData, oldData) {
+                if (this.dragPoint[2]) {
+                    this.delta = [this.delta[0] - (newData[0] - oldData[0]), this.delta[1] - (newData[1] - oldData[1]) ];
+                }
             }
+        },
+        created() {
+            this.pseudo = pseudo(this.center);
+            this.delta = [...this.pseudo];
         },
         mounted() {
             this.oldZoom = this.zoom;
@@ -97,6 +118,11 @@
 
                         backgroundColor(this.backgroundColor);
 
+                        this.pseudo = [
+                            lerp(this.pseudo[0], this.delta[0], 0.3),
+                            lerp(this.pseudo[1], this.delta[1], 0.3)
+                        ];
+
                         camera.position = [this.pseudo[0], this.pseudo[1], 100];
                         camera.target = [this.pseudo[0], this.pseudo[1], 0];
                         camera.zoom = 1 / this.resolutions[this.zoom];
@@ -128,6 +154,9 @@
                                     }),
                                     () => {
                                         this.onLoading(false);
+                                    },
+                                    () => {
+                                        this.onLoading(false);
                                     });
                                 }
                             }
@@ -136,9 +165,10 @@
                         const order = join(layers.map(layer => layer.id), ',');
                         if (this.oldLayers.length !== layers.length
                         || this.oldZoom !== this.zoom
-                        || !isEqual(this.pseudo, this.oldPseudo)
+                        || Math.abs(this.pseudo[0] - this.oldPseudo[0]) < 1.2
+                        && Math.abs(this.pseudo[1] - this.oldPseudo[1]) < 1.2
+                        && !isEqual(this.pseudo, this.oldPseudo)
                         || oldOrder !== order) {
-                            
                             const entities =  this.$am_getEntities({
                                 layers,
                                 entity,
@@ -152,7 +182,8 @@
                                     this.entities = entities;
                                 }
                             });
-                            
+                            this.pseudo = [...this.delta];
+                            this.setCenter(wgs84(this.pseudo));
                         }
                         this.oldSLD = this.currentSLD;
                         this.oldLayers = [...layers];
@@ -194,7 +225,8 @@
                 setSize: 'app/setMapSize',
                 setCenter: 'app/setMapCenter',
                 getInfo: 'app/getInfo',
-                onLoading: 'app/loading'
+                onLoading: 'app/loading',
+                setZoom: 'app/setZoom'
             }),
             $am_getLayerUrl({layer, bbox, width, height}) {
                 const params = {
@@ -205,7 +237,7 @@
                     LAYERS: layer.name,
                     SRS: 'EPSG:900913',
                     TRANSPARENT: 'true',
-                    STYLES: this.projectName + layer.name + '~ecco~style',
+                    STYLES: (layer.prefix && layer.prefix + '~' || '') + layer.name.replace(/\:/g, '_') + '~ecco',
                     WIDTH: width,
                     HEIGHT: height,
                     BBOX: join(bbox, ','),
@@ -267,6 +299,12 @@
                                 callback();
                             }
                         },
+                        textureError: () => {
+                            if (z === layers.length - 1) {
+                                this.onLoading(false);
+                                callback();
+                            }
+                        },
                         position: [0, 0, z],
                         feature: {
                             type: 'Polygon',
@@ -302,6 +340,25 @@
                     center[0] + (-this.width / 2 + x) * this.resolutions[this.zoom],
                     center[1] + (this.height / 2 - y) * this.resolutions[this.zoom]
                 ]));
+            },
+            $am_onMove(event) {
+                const {left, top, width, height} = this.$el.getBoundingClientRect();
+                const point = [
+                    mapValue(event.clientX - left, 0, width, this.bbox[0], this.bbox[2]),
+                    mapValue(event.clientY - top, 0, height, this.bbox[3], this.bbox[1])
+                ];
+                this.pixel = [event.clientX - left, event.clientY - top];
+
+                if (event.button === 2) {
+                    this.dragPoint = [...point, true];
+                } else {
+                    this.dragPoint = [...point, false];
+                }
+            },
+            $am_onScroll(event) {
+                const zoom = event.deltaY < 0 ? this.zoom + 1 : this.zoom - 1;
+                const currentZoom = zoom < 0 ? 0 : zoom > this.resolutions.length - 1 && this.resolutions.length - 1 || zoom;
+                this.setZoom({currentZoom});
             }
         }
     };

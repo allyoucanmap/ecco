@@ -89,18 +89,18 @@
                 :class="`am-item ${item.id === selectedItem.id && 'am-selected'}`"
                 :data-id="item.id">
                 <div class="am-label">
-                    <div>{{ item.label }}</div>
+                    <div>{{ $am_getTitle(item) || item.label }}</div>
                 </div>
                 <div class="am-btns">
                     <button
                         class="am-icon"
-                        @click="() => $am_onRemove(item.id)">
+                        @click="event => $am_onRemove(event, item.id)">
                         X
                     </button>
                     <button
                         v-if="item.type === 'group'"
                         class="inverse am-icon"
-                        @click="() => $am_onExpand(item.id)">
+                        @click="event => $am_onExpand(event, item.id)">
                         {{ item.collapsed ? 'M' : 'P' }}
                     </button>
                     <button
@@ -121,7 +121,7 @@
                     :head="item.head"
                     :collapsed="!item.expanded"
                     :key="item.id"
-                    :on-remove="() => $am_onRemove(item.id)"
+                    :on-remove="event => $am_onRemove(event, item.id)"
                     :on-expand="value => $am_onExpandPanel(item.id, value)">
                     <am-input-group
                         v-for="(param, valueId) in item.params"
@@ -265,7 +265,8 @@
                 this.oldID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-id')));
                 this.oldListID = head(children.filter(child => child.contains(event.target)).map(child => child.getAttribute('data-list-id')));
             },
-            $am_onExpand(itemId) {
+            $am_onExpand(event, itemId) {
+                event.stopPropagation();
                 const items = this.items.map((item) => {
                     return item.id === itemId ? {...item, collapsed: !item.collapsed} : {...item};
                 }).reduce((newItems, item) => {
@@ -283,20 +284,31 @@
                 const items = this.items.map(item => item.id === itemId ? {...item, expanded} : {...item});
                 this.onChange(items);
             },
-            $am_onRemove(id) {
+            $am_onRemove(event, id) {
+                event.stopPropagation();
                 const items = this.items.filter(item => item.id !== id && !(item.groupId === id && item.collapsed));
                 this.onChange(items);
             },
             $am_onDuplicate(event, id) {
                 event.stopPropagation();
                 const items = this.items.reduce((newItems, item) => {
-                    return [...newItems, ...(item.id === id ? [item, {...item, id: uuidv1()}] : [item])];
+                    const idx = uuidv1();
+                    const general = item.general && item.general.map((param) => {
+                        return param.name === 'Name' ? {
+                            ...param,
+                            value: idx
+                        } : param
+                    });
+                    return [...newItems, ...(item.id === id ? [item, {...item, id: idx, general}] : [item])];
                 }, []);
                 this.onChange(items);
             },
             $am_onChange(itemId, valueId, value) {
                 const items = this.items.map(item => item.id === itemId ? {...item, params: (item.params || []).map((param, vId) => vId === valueId ? {...param, value} : {...param})} : {...item});
                 this.onChange(items);
+            },
+            $am_getTitle(item) {
+                return item && item.general && head(item.general.filter(param => param.name === 'Title').map(param => param.value));
             }
         }
     };
